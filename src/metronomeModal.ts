@@ -5,6 +5,8 @@ import {TapTempo} from "./metronome/tapTempo";
 export interface PatternPreview {
 	start: () => Promise<void>;
 	stop: () => void;
+	/** Which beat of the bar is sounding, or null when the preview is not running. */
+	beatInBar: () => number | null;
 }
 import {
 	Beat,
@@ -46,6 +48,7 @@ export class MetronomeModal extends Modal {
 	private readoutEl: HTMLElement | null = null;
 	private tempoInput: TextComponent | null = null;
 	private previewing = false;
+	private previewFrame: number | null = null;
 	private readonly tapTempo = new TapTempo();
 
 	constructor(
@@ -132,6 +135,7 @@ export class MetronomeModal extends Modal {
 	onClose() {
 		// The loop belongs to the dialog, so it goes when the dialog does.
 		this.patternPreview.stop();
+		this.stopFollowingBeat();
 		this.previewing = false;
 		this.contentEl.empty();
 	}
@@ -139,12 +143,36 @@ export class MetronomeModal extends Modal {
 	private async togglePreview(buttonEl: HTMLElement) {
 		if (this.previewing) {
 			this.patternPreview.stop();
+			this.stopFollowingBeat();
 		} else {
 			await this.patternPreview.start();
+			this.followBeat();
 		}
 		this.previewing = !this.previewing;
 		buttonEl.setText(this.previewing ? "Stop" : "Preview");
 		buttonEl.toggleClass("is-active", this.previewing);
+	}
+
+	/** Lights the beat the preview is on, so the pattern can be followed as well as heard. */
+	private followBeat() {
+		const step = () => {
+			this.previewFrame = window.requestAnimationFrame(step);
+			const playing = this.patternPreview.beatInBar();
+			// Re-applied every frame rather than only on change, so it survives the readout being
+			// rebuilt when the pattern is edited mid-preview.
+			Array.from(this.readoutEl?.children ?? [])
+				.forEach((beatEl, index) => beatEl.toggleClass("is-playing", index === playing));
+		};
+		this.previewFrame = window.requestAnimationFrame(step);
+	}
+
+	private stopFollowingBeat() {
+		if (this.previewFrame !== null) {
+			window.cancelAnimationFrame(this.previewFrame);
+			this.previewFrame = null;
+		}
+		Array.from(this.readoutEl?.children ?? [])
+			.forEach(beatEl => beatEl.removeClass("is-playing"));
 	}
 
 	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */
@@ -177,7 +205,10 @@ export class MetronomeModal extends Modal {
 		readoutEl.empty();
 
 		this.meta.pattern.forEach((state, index) => {
-			readoutEl.createDiv({cls: ["chord-sheet-emphasis-readout-beat", `is-${state}`]});
+			// A full-height column holding the bar, so the whole beat can be lit while it sounds.
+			readoutEl
+				.createDiv({cls: "chord-sheet-emphasis-readout-beat"})
+				.createDiv({cls: ["chord-sheet-emphasis-readout-bar", `is-${state}`]});
 
 			const button = beatsEl.createEl("button", {
 				cls: ["chord-sheet-emphasis-beat", `is-${state}`],

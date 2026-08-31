@@ -1068,26 +1068,55 @@ button.chord-sheet-emphasis-beat.is-silent {
 	align-items: flex-end;
 	gap: var(--size-2-2);
 	height: 1.6rem;
-	margin-bottom: var(--size-2-2);
+	/* Leaves room under the track for the playhead. */
+	margin-bottom: var(--size-4-2);
 }
 
+/* The full height of the track, so the beat being sounded can be lit whatever its own bar's height. */
 .chord-sheet-emphasis-readout-beat {
+	display: flex;
+	align-items: flex-end;
 	/* Matches the width of a beat button, so each bar stands over its own beat. */
+	position: relative;
 	width: 2.1rem;
+	height: 100%;
+	border-radius: var(--radius-s) var(--radius-s) 0 0;
+}
+
+.chord-sheet-emphasis-readout-beat.is-playing {
+	background-color: var(--background-modifier-hover);
+}
+
+/* The playhead sits in the gap below the track rather than within the column. An accented beat's bar
+   fills its column in the accent colour, so a mark drawn inside would be invisible on exactly those
+   beats — and recolouring the bar would read as the beat being accented rather than as it sounding. */
+.chord-sheet-emphasis-readout-beat.is-playing::after {
+	content: "";
+	position: absolute;
+	left: 0;
+	right: 0;
+	bottom: -5px;
+	height: 3px;
+	border-radius: 2px;
+	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+}
+
+.chord-sheet-emphasis-readout-bar {
+	width: 100%;
 	border-radius: 2px 2px 0 0;
 	background-color: var(--background-modifier-border);
 }
 
-.chord-sheet-emphasis-readout-beat.is-accent {
+.chord-sheet-emphasis-readout-bar.is-accent {
 	height: 100%;
 	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
 }
 
-.chord-sheet-emphasis-readout-beat.is-normal {
+.chord-sheet-emphasis-readout-bar.is-normal {
 	height: 55%;
 }
 
-.chord-sheet-emphasis-readout-beat.is-silent {
+.chord-sheet-emphasis-readout-bar.is-silent {
 	height: 3px;
 	opacity: 0.4;
 }

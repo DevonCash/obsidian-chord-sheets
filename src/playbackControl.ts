@@ -244,6 +244,16 @@ export class PlaybackControl extends Component {
 		return this.previewing;
 	}
 
+	/** Which beat of the bar the preview is on, or null when nothing is previewing. */
+	get previewBeatInBar(): number | null {
+		if (!this.previewing) {
+			return null;
+		}
+		const {beatsPerBar} = this.transport.songMeta;
+		const beat = Math.floor(this.transport.currentBeat());
+		return ((beat % beatsPerBar) + beatsPerBar) % beatsPerBar;
+	}
+
 	/**
 	 * Loops the click alone, for hearing a pattern while setting it. No frames run, so the page behind
 	 * stays where it is — this is the metronome without the song.

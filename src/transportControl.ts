@@ -128,7 +128,8 @@ export class TransportControl {
 			beat => void this.playback.previewBeat(beat),
 			{
 				start: () => this.playback.startPatternPreview(),
-				stop: () => this.playback.stopPatternPreview()
+				stop: () => this.playback.stopPatternPreview(),
+				beatInBar: () => this.playback.previewBeatInBar
 			}
 		).open();
 	}
