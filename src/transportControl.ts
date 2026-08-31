@@ -1,13 +1,9 @@
 import {debounce, MarkdownView, setIcon, setTooltip, SliderComponent} from "obsidian";
-import {EmphasisModal} from "./emphasisModal";
+import {MetronomeModal} from "./metronomeModal";
 import type {PlaybackControl} from "./playbackControl";
 import {AUTOSCROLL_STEPS} from "./scrollPacer";
 import {
-	Beat,
 	EMPHASIS_PROPERTY,
-	MAX_TEMPO,
-	MIN_TEMPO,
-	parseTimeSignature,
 	patternToString,
 	SongMeta,
 	TEMPO_PROPERTY,
@@ -25,9 +21,7 @@ import {
 export class TransportControl {
 	private containerEl: HTMLElement | null = null;
 	private slider: SliderComponent | null = null;
-	private tempoInput: HTMLInputElement | null = null;
-	private timeSignatureInput: HTMLInputElement | null = null;
-	private emphasisButton: HTMLElement | null = null;
+	private settingsButton: HTMLElement | null = null;
 	private scrollButton: HTMLElement | null = null;
 	private metronomeButton: HTMLElement | null = null;
 	/** Whether the currently rendered bar has metronome controls rather than the speed slider. */
@@ -72,105 +66,64 @@ export class TransportControl {
 	}
 
 	private renderMetronomeControls(containerEl: HTMLElement, songMeta: SongMeta) {
-		this.metronomeButton = containerEl.createEl("button", {cls: "chord-sheet-transport-button"});
 		// Only silences the click; it never starts or stops the song.
+		this.metronomeButton = containerEl.createEl("button", {cls: "chord-sheet-transport-button"});
 		this.metronomeButton.addEventListener("click", () => {
 			this.playback.toggleMute();
 			this.update();
 		});
 
-		// The bar is two rows tall, so tempo and time signature stack into it side by side.
-		const fieldsEl = containerEl.createDiv({cls: "chord-sheet-transport-fields"});
-
-		this.tempoInput = this.createField(fieldsEl, "Tempo (BPM)", "chord-sheet-transport-tempo",
-			String(songMeta.bpm), value => {
-				const bpm = parseFloat(value);
-				return isNaN(bpm) || bpm < MIN_TEMPO || bpm > MAX_TEMPO ? null : {[TEMPO_PROPERTY]: bpm};
-			});
-		this.tempoInput.type = "number";
-		this.tempoInput.min = String(MIN_TEMPO);
-		this.tempoInput.max = String(MAX_TEMPO);
-
-		this.timeSignatureInput = this.createField(fieldsEl, "Time signature",
-			"chord-sheet-transport-time-signature", timeSignatureToString(songMeta), value =>
-				parseTimeSignature(value) ? {[TIME_SIGNATURE_PROPERTY]: value.trim()} : null
-		);
-
-		this.emphasisButton = containerEl.createEl("button", {cls: "chord-sheet-transport-emphasis"});
-		this.emphasisButton.addEventListener("click", () => this.openEmphasisModal());
-		this.renderEmphasis(songMeta);
+		// Tempo, meter and emphasis are set once for a song rather than adjusted while playing, so the
+		// bar shows them and opens the dialog rather than carrying editable fields of its own.
+		this.settingsButton = containerEl.createEl("button", {cls: "chord-sheet-transport-settings"});
+		this.settingsButton.addEventListener("click", () => this.openMetronomeModal());
+		this.renderSummary(songMeta);
 	}
 
-	/**
-	 * Shows the pattern as one element per beat, so the bar carries the same shape the dialog edits.
-	 */
-	private renderEmphasis(songMeta: SongMeta) {
-		const button = this.emphasisButton;
+	/** The song's settings at a glance: tempo, meter, and the shape of the emphasis pattern. */
+	private renderSummary(songMeta: SongMeta) {
+		const button = this.settingsButton;
 		if (!button) {
 			return;
 		}
 
 		button.empty();
-		songMeta.pattern.forEach(beat => button.createSpan({
+		const textEl = button.createDiv({cls: "chord-sheet-transport-summary"});
+		textEl.createSpan({cls: "chord-sheet-transport-tempo", text: String(songMeta.bpm)});
+		textEl.createSpan({
+			cls: "chord-sheet-transport-time-signature",
+			text: timeSignatureToString(songMeta)
+		});
+
+		const patternEl = button.createDiv({cls: "chord-sheet-transport-emphasis"});
+		songMeta.pattern.forEach(beat => patternEl.createSpan({
 			cls: ["chord-sheet-transport-emphasis-beat", `is-${beat}`]
 		}));
-		setTooltip(button, `Emphasis: ${patternToString(songMeta)} — click to edit`);
+
+		setTooltip(button, `${songMeta.bpm} BPM, ${timeSignatureToString(songMeta)}, `
+			+ `emphasis ${patternToString(songMeta)} — click to edit`);
 	}
 
-	private openEmphasisModal() {
+	private openMetronomeModal() {
 		const songMeta = this.playback.songMeta;
 		if (!songMeta) {
 			return;
 		}
 
-		// Written back as the pattern is edited, but not on every click: the metronome hears each change
-		// straight away, while the note is only rewritten once the clicking stops.
-		const save = debounce(
-			(pattern: Beat[]) => this.saveProperties({
-				[EMPHASIS_PROPERTY]: patternToString({pattern})
-			}),
-			400, true
-		);
+		// Written back as the settings are edited, but not on every keystroke: the metronome follows each
+		// change straight away, while the note is only rewritten once the editing stops.
+		const save = debounce((meta: SongMeta) => this.saveProperties({
+			[TEMPO_PROPERTY]: meta.bpm,
+			[TIME_SIGNATURE_PROPERTY]: timeSignatureToString(meta),
+			[EMPHASIS_PROPERTY]: patternToString(meta)
+		}), 400, true);
 
-		new EmphasisModal(
-			this.view.app, songMeta.beatsPerBar, songMeta.beatUnit, songMeta.pattern,
-			pattern => {
-				// Read the song back rather than reusing the copy captured when the dialog opened, so an
-				// edit made to the note meanwhile is not undone by a click in here.
-				const current = this.playback.songMeta ?? songMeta;
-				// Keep the running metronome and the bar in step ahead of the frontmatter write.
-				this.playback.setSongMeta({...current, pattern});
-				this.renderEmphasis({...current, pattern});
-				save(pattern);
-			}
-		).open();
-	}
-
-	/**
-	 * A text field that writes its value back to the note's frontmatter once it parses. Invalid input is
-	 * flagged inline and never saved.
-	 */
-	private createField(
-		containerEl: HTMLElement,
-		tooltip: string,
-		cls: string,
-		value: string,
-		parse: (value: string) => Record<string, unknown> | null
-	): HTMLInputElement {
-		const el = containerEl.createEl("input", {cls: ["chord-sheet-transport-field", cls], value});
-		setTooltip(el, tooltip);
-
-		const commit = () => {
-			const properties = parse(el.value);
-			el.toggleClass("chord-sheet-transport-field-invalid", properties === null);
-			if (properties) {
-				this.saveProperties(properties);
-			}
-		};
-
-		el.addEventListener("change", commit);
-		el.addEventListener("blur", commit);
-		return el;
+		new MetronomeModal(this.view.app, songMeta, meta => {
+			// Keep the running metronome and the bar in step ahead of the frontmatter write.
+			this.playback.setSongMeta(meta);
+			this.renderSummary(meta);
+			save(meta);
+		}).open();
 	}
 
 	private saveProperties(properties: Record<string, unknown>) {
@@ -219,16 +172,7 @@ export class TransportControl {
 			return;
 		}
 		if (songMeta) {
-			this.updateFieldValue(this.tempoInput, String(songMeta.bpm));
-			this.updateFieldValue(this.timeSignatureInput, timeSignatureToString(songMeta));
-			this.renderEmphasis(songMeta);
-		}
-	}
-
-	private updateFieldValue(el: HTMLInputElement | null, value: string) {
-		// Do not fight the user while they are typing in the field.
-		if (el && el !== activeElement() && el.value !== value) {
-			el.value = value;
+			this.renderSummary(songMeta);
 		}
 	}
 
@@ -252,14 +196,8 @@ export class TransportControl {
 		this.containerEl?.remove();
 		this.containerEl = null;
 		this.slider = null;
-		this.tempoInput = null;
-		this.timeSignatureInput = null;
-		this.emphasisButton = null;
+		this.settingsButton = null;
 		this.scrollButton = null;
 		this.metronomeButton = null;
 	}
-}
-
-function activeElement(): Element | null {
-	return document.activeElement;
 }

@@ -959,13 +959,6 @@ svg.enharmonic-toggle {
 	height: var(--icon-l);
 }
 
-.chord-sheet-autoscroll-control input.chord-sheet-transport-field {
-	height: 1.4rem;
-	padding: 0 var(--size-2-2);
-	font-size: var(--file-header-font-size);
-	text-align: center;
-}
-
 .chord-sheet-autoscroll-control input.chord-sheet-transport-tempo {
 	width: 4.5rem;
 }
@@ -974,34 +967,52 @@ svg.enharmonic-toggle {
 	width: 3.5rem;
 }
 
-/* Tempo and time signature stack into the two-row bar. */
-.chord-sheet-transport-fields {
+/* The song's settings at a glance, and the way into the dialog that edits them. */
+.chord-sheet-autoscroll-control button.chord-sheet-transport-settings {
 	display: flex;
 	flex-direction: column;
-	gap: var(--size-2-1);
-}
-
-.chord-sheet-transport-fields input.chord-sheet-transport-field {
-	height: 1.35rem;
-}
-
-/* The emphasis pattern, drawn one mark per beat: tall for an accent, short for a normal beat and a
-   faint dot for a silent one, so the bar's rhythm is readable at a glance. */
-.chord-sheet-autoscroll-control button.chord-sheet-transport-emphasis {
-	display: flex;
-	align-items: flex-end;
+	align-items: center;
+	justify-content: center;
 	gap: 2px;
-	height: 1.6rem;
+	height: 2.6rem;
 	padding: 0 var(--size-4-2);
 	box-shadow: none;
 	background: transparent;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-s);
+	color: var(--text-muted);
 	cursor: pointer;
 }
 
-.chord-sheet-autoscroll-control button.chord-sheet-transport-emphasis:hover {
+.chord-sheet-autoscroll-control button.chord-sheet-transport-settings:hover {
 	background-color: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.chord-sheet-transport-summary {
+	display: flex;
+	align-items: baseline;
+	gap: var(--size-2-2);
+	line-height: 1;
+}
+
+.chord-sheet-transport-tempo {
+	font-weight: var(--font-bold);
+	color: var(--text-normal);
+	font-variant-numeric: tabular-nums;
+}
+
+.chord-sheet-transport-time-signature {
+	font-size: var(--font-ui-smaller);
+}
+
+/* The emphasis pattern, drawn one mark per beat: tall for an accent, short for a normal beat and a
+   faint dot for a silent one, so the bar's rhythm is readable at a glance. */
+.chord-sheet-transport-emphasis {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	height: 0.6rem;
 }
 
 .chord-sheet-transport-emphasis-beat {
@@ -1011,23 +1022,23 @@ svg.enharmonic-toggle {
 }
 
 .chord-sheet-transport-emphasis-beat.is-accent {
-	height: 0.9rem;
+	height: 0.6rem;
 	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
 }
 
 .chord-sheet-transport-emphasis-beat.is-normal {
-	height: 0.55rem;
+	height: 0.35rem;
 }
 
 .chord-sheet-transport-emphasis-beat.is-silent {
-	height: 3px;
+	height: 2px;
 	opacity: 0.4;
 }
 
-/* Emphasis dialog */
-.chord-sheet-emphasis-hint {
-	margin-top: 0;
-	color: var(--text-muted);
+/* Metronome dialog */
+.chord-sheet-invalid {
+	border-color: var(--text-error);
+	color: var(--text-error);
 }
 
 .chord-sheet-emphasis-beats {
@@ -1107,12 +1118,6 @@ button.chord-sheet-emphasis-beat.is-silent {
 .chord-sheet-emphasis-swatch.is-silent {
 	opacity: 0.5;
 }
-
-.chord-sheet-autoscroll-control input.chord-sheet-transport-field-invalid {
-	border-color: var(--text-error);
-	color: var(--text-error);
-}
-
 
 /* DEBUG */
 
