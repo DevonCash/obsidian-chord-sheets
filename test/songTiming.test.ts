@@ -202,6 +202,20 @@ describe("chord occurrences", () => {
 		});
 	});
 
+	it("treats a chord before the first bar line as its own measure", () => {
+		// "Em | Dm A |" is a bar of Em followed by a bar split between Dm and A.
+		expect(chordBeats("Em | Dm A |")).toEqual([["Em", 0], ["Dm", 4], ["A", 6]]);
+	});
+
+	it.each([
+		"Em | Dm A |",
+		"Em | Dm A",
+		"| Em | Dm A |",
+	])("reads %p the same way whether the outer bar lines are written or not", (line) => {
+		expect(chordBeats(line)).toEqual([["Em", 0], ["Dm", 4], ["A", 6]]);
+		expect(buildSongTimeline(block(line), "chords", markers, 4).totalBeats).toBe(8);
+	});
+
 	it("counts / as a beat slot too", () => {
 		expect(chordBeats("| Em / / Am |")).toEqual([["Em", 0], ["Am", 3]]);
 	});
