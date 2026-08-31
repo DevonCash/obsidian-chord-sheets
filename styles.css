@@ -878,16 +878,17 @@ svg.enharmonic-toggle {
 	box-shadow: 0 0 0 2px var(--chord-sheet-playing-chord-background-color, var(--text-selection));
 }
 
-/* Playback (autoscroll + metronome) controls */
+/* Playback (autoscroll + metronome) controls: a bar along the bottom of the view */
 .chord-sheet-autoscroll-control {
 	display: flex;
 	justify-content: flex-end;
 	align-items: center;
 	gap: 0.4rem;
 	padding-right: var(--size-4-5);
-	border-bottom: 1px solid var(--divider-color);
-    border-top: 1px solid var(--divider-color);
-	min-height: 1.6rem;
+	border-top: 1px solid var(--divider-color);
+	min-height: 3.2rem;
+	/* Sits below the editor without being squeezed by it. */
+	flex: 0 0 auto;
 
 	color: var(--text-muted);
 	font-size: var(--file-header-font-size);
@@ -925,6 +926,19 @@ svg.enharmonic-toggle {
 .chord-sheet-autoscroll-control button.chord-sheet-transport-button .svg-icon {
 	width: var(--icon-s);
 	height: var(--icon-s);
+}
+
+/* The primary transport control fills the height of the bar. */
+.chord-sheet-autoscroll-control button.chord-sheet-transport-play {
+	align-self: stretch;
+	height: auto;
+	padding: 0 var(--size-4-3);
+	border-radius: 0;
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-play .svg-icon {
+	width: var(--icon-l);
+	height: var(--icon-l);
 }
 
 .chord-sheet-autoscroll-control input.chord-sheet-transport-field {

@@ -38,13 +38,15 @@ export class TransportControl {
 	render() {
 		this.remove();
 
+		// Appended rather than prepended, so the bar sits along the bottom of the view.
 		const containerEl = this.view.contentEl.createDiv({
-			prepend: true,
 			cls: "chord-sheet-autoscroll-control"
 		});
 		this.containerEl = containerEl;
 
-		this.scrollButton = containerEl.createEl("button", {cls: "chord-sheet-transport-button"});
+		this.scrollButton = containerEl.createEl("button", {
+			cls: ["chord-sheet-transport-button", "chord-sheet-transport-play"]
+		});
 		this.scrollButton.addEventListener("click", () => {
 			this.playback.isRunning ? this.playback.stopScroll() : this.playback.startScroll();
 			this.update();
