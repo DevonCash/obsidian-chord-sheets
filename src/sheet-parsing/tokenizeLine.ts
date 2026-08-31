@@ -68,9 +68,11 @@ export function tokenizeLine(line: string, lineIndex: number, chordLineMarker: s
 
 		// Chord symbol with custom shape definition in brackets, optionally barre position:
 		// Bbadd13[x13333], Dm6[4|x2x132] (with barree position), B*[_224442_] (with barre markers).
-		// The chord symbol is free-form after an uppercase letter (e.g. Bø, BΔ, B*),
-		// disambiguated by the frets pattern from regular bracketed text.
-		userDefinedChord: /^(?<chordSymbol>[A-Z][^\s[\]]*)(?<open>\[)(?:(?<pos>[0-9]+)(?<posSep>\|))?(?<frets>[0-9x_, ]+)(?<close>])/d,
+		// The chord symbol is free-form after a note letter (e.g. Bø, BΔ, B*), and is disambiguated from
+		// regular bracketed text by that note letter plus a frets pattern holding at least four
+		// positions — one per string. Without both, ordinary prose like "Verse[2]" or "Baby[1]" would be
+		// read as a chord shape, which also forces the whole line to be treated as a chord line.
+		userDefinedChord: /^(?<chordSymbol>[A-G][^\s[\]]*)(?<open>\[)(?:(?<pos>[0-9]+)(?<posSep>\|))?(?<frets>(?:[0-9x_][, ]*){4,})(?<close>])/d,
 
 		// Possible rhythm markers: bar lines (|), strums (/), repeats (%), etc.
 		// Also matches the no-chord marker NC, N.C., N. C.
