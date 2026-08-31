@@ -507,6 +507,13 @@ describe('Parsing / Tokenization', () => {
 			]);
 		});
 
+		test('markers written without spaces are one token each', () => {
+			// Each marker renders as its own element, so a run of them stays individually addressable.
+			const { tokens } = tokenizeLine('|%|%|', lineIndex, chordLineMarker, textLineMarker);
+			expect(tokens.map(t => t.value)).toEqual(['|', '%', '|', '%', '|']);
+			expect(tokens.every(t => t.type === 'rhythm')).toBe(true);
+		});
+
 		test('rhythm patterns with chords', () => {
 			const line = '| G / / / | Am / C /  |    %    |';
 			const tokens = tokenizeLine(line, lineIndex, chordLineMarker, textLineMarker)

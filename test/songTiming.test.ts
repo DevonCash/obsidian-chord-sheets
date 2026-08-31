@@ -428,3 +428,32 @@ describe("slotAtBeat", () => {
 		expect(at(8)).toBe("%");
 	});
 });
+
+describe("markers written without spaces", () => {
+	// A run like |%|%|%|%| used to tokenize as a single element, so the whole run highlighted at once
+	// instead of one bar at a time.
+	const doc = block("|%|%|%|%|");
+	const timeline = buildSongTimeline(doc, "chords", markers, 4);
+
+	it("is four separate bars", () => {
+		expect(timeline.entries[0].measures).toBe(4);
+		expect(timeline.slots.map(s => s.startBeat)).toEqual([0, 4, 8, 12]);
+	});
+
+	it("gives each bar its own rendered element", () => {
+		const indices = timeline.slots.map(s => s.tokenIndexInLine);
+		expect(indices).toEqual([1, 3, 5, 7]);
+		expect(new Set(indices).size).toBe(indices.length);
+	});
+
+	it("highlights one bar at a time", () => {
+		expect([0, 4, 8, 12].map(beat => slotAtBeat(timeline, beat)!.tokenIndexInLine))
+			.toEqual([1, 3, 5, 7]);
+	});
+
+	it("resolves a click to the bar clicked", () => {
+		expect(slotAtRenderedPosition(timeline, 0, 0, 5)?.startBeat).toBe(8);
+		// The bar lines between them are still dividers, not beats.
+		expect(slotAtRenderedPosition(timeline, 0, 0, 4)).toBeNull();
+	});
+});

@@ -77,8 +77,9 @@ export function tokenizeLine(line: string, lineIndex: number, chordLineMarker: s
 		// Possible rhythm markers: bar lines (|), strums (/), repeats (%), etc.
 		// Also matches the no-chord marker NC, N.C., N. C.
 		// Interpretation depends on line context.
-		// wordOrRhythm: /^[[\]/|%]+/d,
-		wordOrRhythm: /^(?:[Nn]\.?\s?[Cc]\.?|[[\]/|%]+)/d,
+		// One marker per token, so that markers written without spaces between them (|%|%|) stay
+		// individually addressable — each renders as its own element, and each repeat is its own beat.
+		wordOrRhythm: /^(?:[Nn]\.?\s?[Cc]\.?|[[\]/|%])/d,
 
 
 		// Any text that isn't whitespace or starting with [ could be chord symbols.
