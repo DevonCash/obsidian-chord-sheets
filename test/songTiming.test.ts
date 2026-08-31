@@ -273,12 +273,18 @@ describe("chord occurrences", () => {
 		expect(doc.split("\n")[6]).toBe("```chords");
 	});
 
-	it("has no chords for a line the tokenizer cannot separate", () => {
-		// `|Em|Am|` folds into a single word token, so there is nothing to highlight — but the line is
-		// still two measures long, so the timing is unaffected.
-		const timeline = buildSongTimeline(block("|Em|Am|"), "chords", markers, 4);
-		expect(timeline.chords).toHaveLength(0);
-		expect(timeline.totalBeats).toBe(8);
+	it.each([
+		["|Em|Am|", [["Em", 0], ["Am", 4]]],
+		["|Em Am|C|", [["Em", 0], ["Am", 2], ["C", 4]]],
+		["Em|Dm A|", [["Em", 0], ["Dm", 4], ["A", 6]]],
+		["|Em|%|%|Am|", [["Em", 0], ["Am", 12]]],
+	])("reads %p written tight against the bar lines", (line, expected) => {
+		expect(chordBeats(line)).toEqual(expected);
+	});
+
+	it("keeps slash chords intact, since a slash is not a bar line", () => {
+		expect(chordBeats("C/G | D/F#")).toEqual([["C/G", 0], ["D/F#", 4]]);
+		expect(chordBeats("|C/G|D/F#|")).toEqual([["C/G", 0], ["D/F#", 4]]);
 	});
 });
 

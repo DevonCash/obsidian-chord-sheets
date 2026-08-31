@@ -81,7 +81,9 @@ export function tokenizeLine(line: string, lineIndex: number, chordLineMarker: s
 
 		// Any text that isn't whitespace or starting with [ could be chord symbols.
 		// Interpretation depends on line context.
-		wordOrChord: /^[^\s[]+/d,
+		// Bar lines end a word just like whitespace does, so that chords written tight against them
+		// (|Em|Am|) are still recognised. Slashes are not excluded, as they belong to slash chords (C/G).
+		wordOrChord: /^[^\s[|]+/d,
 
 		// Record whitespace so that the input can be exactly recreated in the reading
 		// view markdown post processor
