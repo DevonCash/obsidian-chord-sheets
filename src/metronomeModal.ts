@@ -1,5 +1,11 @@
 import {App, Modal, Setting, setTooltip, TextComponent} from "obsidian";
 import {TapTempo} from "./metronome/tapTempo";
+
+/** Looping the pattern while it is being set, without the song running behind it. */
+export interface PatternPreview {
+	start: () => Promise<void>;
+	stop: () => void;
+}
 import {
 	Beat,
 	MAX_TEMPO,
@@ -11,11 +17,14 @@ import {
 	timeSignatureToString
 } from "./metronome/songMeta";
 
-/** Clicking a beat steps it through the three states. */
+/**
+ * Clicking a beat steps it through the three states, building up from silence: a beat is given a click,
+ * then an accent, then taken away again.
+ */
 const NEXT_STATE: Record<Beat, Beat> = {
-	accent: "normal",
-	normal: "silent",
-	silent: "accent"
+	silent: "normal",
+	normal: "accent",
+	accent: "silent"
 };
 
 const STATE_LABEL: Record<Beat, string> = {
@@ -36,13 +45,15 @@ export class MetronomeModal extends Modal {
 	private beatsEl: HTMLElement | null = null;
 	private readoutEl: HTMLElement | null = null;
 	private tempoInput: TextComponent | null = null;
+	private previewing = false;
 	private readonly tapTempo = new TapTempo();
 
 	constructor(
 		app: App,
 		meta: SongMeta,
 		private onChange: (meta: SongMeta) => void,
-		private onPreview: (beat: Beat) => void
+		private onPreview: (beat: Beat) => void,
+		private patternPreview: PatternPreview
 	) {
 		super(app);
 		this.meta = {...meta, pattern: [...meta.pattern]};
@@ -102,7 +113,14 @@ export class MetronomeModal extends Modal {
 		// Labelled like the settings above it rather than as a heading, so the three read as one list.
 		new Setting(contentEl)
 			.setName("Emphasis")
-			.setDesc("Click a beat to step it through accented, normal and silent, and hear it.");
+			.setDesc("Click a beat to step it through silent, normal and accented, and hear it.")
+			.addButton(button => {
+				button.buttonEl.addClass("chord-sheet-pattern-preview");
+				button
+					.setButtonText("Preview")
+					.setTooltip("Loop the pattern without moving the page behind")
+					.onClick(() => void this.togglePreview(button.buttonEl));
+			});
 
 		// The same shape the playback controls show, drawn over the beat it belongs to.
 		this.readoutEl = contentEl.createDiv({cls: "chord-sheet-emphasis-readout"});
@@ -112,7 +130,21 @@ export class MetronomeModal extends Modal {
 	}
 
 	onClose() {
+		// The loop belongs to the dialog, so it goes when the dialog does.
+		this.patternPreview.stop();
+		this.previewing = false;
 		this.contentEl.empty();
+	}
+
+	private async togglePreview(buttonEl: HTMLElement) {
+		if (this.previewing) {
+			this.patternPreview.stop();
+		} else {
+			await this.patternPreview.start();
+		}
+		this.previewing = !this.previewing;
+		buttonEl.setText(this.previewing ? "Stop" : "Preview");
+		buttonEl.toggleClass("is-active", this.previewing);
 	}
 
 	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */

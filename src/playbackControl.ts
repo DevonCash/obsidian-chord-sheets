@@ -36,6 +36,10 @@ export class PlaybackControl extends Component {
 	private playing = false;
 	/** Whether the click is silenced. Independent of whether the song is running. */
 	private muted: boolean;
+	/** Whether the click is looping on its own, with the song stopped. */
+	private previewing = false;
+	/** Where the song stood when a pattern preview took the transport over. */
+	private pausedAtBeat = 0;
 	/** Whether the on-screen controls are showing. Independent of whether anything is playing. */
 	private controlsVisible = false;
 	/** Scroll offset accumulated from the user scrolling by hand, so nudging the view re-anchors it. */
@@ -171,6 +175,7 @@ export class PlaybackControl extends Component {
 		if (this.playing) {
 			return;
 		}
+		this.stopPatternPreview();
 
 		// Must happen in response to a user gesture, otherwise the audio context stays suspended. Done
 		// even when muted, so unmuting mid-song does not need a gesture of its own.
@@ -235,8 +240,48 @@ export class PlaybackControl extends Component {
 		await this.click.preview(emphasis);
 	}
 
+	get isPreviewingPattern(): boolean {
+		return this.previewing;
+	}
+
+	/**
+	 * Loops the click alone, for hearing a pattern while setting it. No frames run, so the page behind
+	 * stays where it is — this is the metronome without the song.
+	 *
+	 * Like the single beat preview it ignores mute, being a direct request rather than the running click.
+	 */
+	async startPatternPreview() {
+		if (this.playing || this.previewing) {
+			return;
+		}
+
+		const audioContext = await this.click.prepareAudio();
+		this.transport.setAudioContext(audioContext);
+
+		// Play the bar from its first beat, and put the song back where it was afterwards.
+		this.pausedAtBeat = this.transport.currentBeat();
+		this.transport.reset();
+
+		this.previewing = true;
+		this.click.setMuted(false);
+		this.transport.start();
+		this.click.start();
+	}
+
+	stopPatternPreview() {
+		if (!this.previewing) {
+			return;
+		}
+		this.previewing = false;
+		this.click.stop();
+		this.click.setMuted(this.muted);
+		this.transport.pause();
+		this.transport.seek(this.pausedAtBeat);
+	}
+
 	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */
 	stop() {
+		this.stopPatternPreview();
 		const wasShowing = this.playing || this.controlsVisible;
 		this.playing = false;
 		this.controlsVisible = false;

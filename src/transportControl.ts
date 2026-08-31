@@ -125,7 +125,11 @@ export class TransportControl {
 				this.renderSummary(meta);
 				save(meta);
 			},
-			beat => void this.playback.previewBeat(beat)
+			beat => void this.playback.previewBeat(beat),
+			{
+				start: () => this.playback.startPatternPreview(),
+				stop: () => this.playback.stopPatternPreview()
+			}
 		).open();
 	}
 

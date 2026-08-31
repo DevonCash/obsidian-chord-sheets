@@ -1008,9 +1008,17 @@ svg.enharmonic-toggle {
 }
 
 /* Metronome dialog */
-/* Wide enough for either label, so the button does not resize as it prompts for another tap. */
+/* Wide enough for either label, so these buttons do not resize as their labels change. */
 button.chord-sheet-tap-tempo {
 	min-width: 7rem;
+}
+
+button.chord-sheet-pattern-preview {
+	min-width: 6rem;
+}
+
+button.chord-sheet-pattern-preview.is-active {
+	color: var(--chord-sheet-transport-active-color, var(--text-accent));
 }
 
 .chord-sheet-invalid {
