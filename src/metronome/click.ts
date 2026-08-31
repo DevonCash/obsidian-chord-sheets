@@ -7,6 +7,7 @@
  * hardware plays them at exactly the requested time.
  */
 
+import {Beat} from "./songMeta";
 import {Transport} from "./transport";
 
 const SCHEDULER_INTERVAL_MS = 25;
@@ -123,6 +124,21 @@ export class MetronomeClick {
 		}
 	}
 
+	/**
+	 * Sounds a single beat straight away, whatever the metronome is doing. Used to hear what a beat will
+	 * sound like while setting the emphasis pattern, so it deliberately ignores mute: it answers a
+	 * direct request rather than being part of the running click.
+	 */
+	async preview(emphasis: Beat) {
+		if (emphasis === "silent" || this.volume <= 0) {
+			return;
+		}
+		const context = await this.prepareAudio();
+		if (context) {
+			this.sound(emphasis, context.currentTime + MIN_LEAD_SECONDS);
+		}
+	}
+
 	private playBeat(beat: number, time: number) {
 		const {beatsPerBar, pattern} = this.transport.songMeta;
 		// Silent beats still advance the count, so a 12/8 "X__x__x__x__" sounds four times per bar while
@@ -131,7 +147,10 @@ export class MetronomeClick {
 		if (emphasis === "silent" || this.muted || this.volume <= 0) {
 			return;
 		}
+		this.sound(emphasis, time);
+	}
 
+	private sound(emphasis: Beat, time: number) {
 		const context = this.audioContext!;
 		const oscillator = context.createOscillator();
 		const gain = context.createGain();

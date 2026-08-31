@@ -1054,46 +1054,34 @@ button.chord-sheet-emphasis-beat.is-silent {
 	opacity: 0.5;
 }
 
-.chord-sheet-emphasis-pattern {
-	margin-top: var(--size-4-4);
-	font-family: var(--font-monospace);
-	font-size: var(--font-ui-large);
-	letter-spacing: 0.15em;
-	color: var(--text-muted);
-}
-
-.chord-sheet-emphasis-legend {
+/* A bar per beat, standing over the button that sets it: the same shape the playback controls show. */
+.chord-sheet-emphasis-readout {
 	display: flex;
-	gap: var(--size-4-4);
-	margin-top: var(--size-4-3);
-	color: var(--text-muted);
-	font-size: var(--font-ui-smaller);
-}
-
-.chord-sheet-emphasis-legend-item {
-	display: flex;
-	align-items: center;
+	align-items: flex-end;
 	gap: var(--size-2-2);
+	height: 1.6rem;
+	margin-bottom: var(--size-2-2);
 }
 
-.chord-sheet-emphasis-swatch {
-	width: 0.8rem;
-	height: 0.8rem;
-	border: 2px solid var(--background-modifier-border);
-	border-radius: 2px;
-}
-
-.chord-sheet-emphasis-swatch.is-accent {
-	border-color: var(--chord-sheet-transport-active-color, var(--text-accent));
-	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
-}
-
-.chord-sheet-emphasis-swatch.is-normal {
+.chord-sheet-emphasis-readout-beat {
+	/* Matches the width of a beat button, so each bar stands over its own beat. */
+	width: 2.1rem;
+	border-radius: 2px 2px 0 0;
 	background-color: var(--background-modifier-border);
 }
 
-.chord-sheet-emphasis-swatch.is-silent {
-	opacity: 0.5;
+.chord-sheet-emphasis-readout-beat.is-accent {
+	height: 100%;
+	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+}
+
+.chord-sheet-emphasis-readout-beat.is-normal {
+	height: 55%;
+}
+
+.chord-sheet-emphasis-readout-beat.is-silent {
+	height: 3px;
+	opacity: 0.4;
 }
 
 /* DEBUG */

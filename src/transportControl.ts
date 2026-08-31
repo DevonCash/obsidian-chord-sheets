@@ -116,12 +116,17 @@ export class TransportControl {
 			[EMPHASIS_PROPERTY]: patternToString(meta)
 		}), 400, true);
 
-		new MetronomeModal(this.view.app, songMeta, meta => {
-			// Keep the running metronome and the bar in step ahead of the frontmatter write.
-			this.playback.setSongMeta(meta);
-			this.renderSummary(meta);
-			save(meta);
-		}).open();
+		new MetronomeModal(
+			this.view.app,
+			songMeta,
+			meta => {
+				// Keep the running metronome and the bar in step ahead of the frontmatter write.
+				this.playback.setSongMeta(meta);
+				this.renderSummary(meta);
+				save(meta);
+			},
+			beat => void this.playback.previewBeat(beat)
+		).open();
 	}
 
 	private saveProperties(properties: Record<string, unknown>) {

@@ -3,7 +3,7 @@ import {ChordSheetsSettings} from "./chordSheetsSettings";
 import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
 import {MetronomeClick} from "./metronome/click";
 import {Transport} from "./metronome/transport";
-import {parseSongMeta, SongMeta} from "./metronome/songMeta";
+import {Beat, parseSongMeta, SongMeta} from "./metronome/songMeta";
 import {
 	buildSongTimeline,
 	slotAtBeat,
@@ -228,6 +228,11 @@ export class PlaybackControl extends Component {
 
 	toggleMute() {
 		this.setMuted(!this.muted);
+	}
+
+	/** Sounds one beat on request, for hearing what an emphasis setting does. */
+	async previewBeat(emphasis: Beat) {
+		await this.click.preview(emphasis);
 	}
 
 	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */

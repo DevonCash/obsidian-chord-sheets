@@ -19,9 +19,9 @@ const NEXT_STATE: Record<Beat, Beat> = {
 };
 
 const STATE_LABEL: Record<Beat, string> = {
-	accent: "Accented",
-	normal: "Normal",
-	silent: "Silent"
+	accent: "accented",
+	normal: "normal",
+	silent: "silent"
 };
 
 /**
@@ -34,11 +34,16 @@ const STATE_LABEL: Record<Beat, string> = {
 export class MetronomeModal extends Modal {
 	private meta: SongMeta;
 	private beatsEl: HTMLElement | null = null;
-	private patternEl: HTMLElement | null = null;
+	private readoutEl: HTMLElement | null = null;
 	private tempoInput: TextComponent | null = null;
 	private readonly tapTempo = new TapTempo();
 
-	constructor(app: App, meta: SongMeta, private onChange: (meta: SongMeta) => void) {
+	constructor(
+		app: App,
+		meta: SongMeta,
+		private onChange: (meta: SongMeta) => void,
+		private onPreview: (beat: Beat) => void
+	) {
 		super(app);
 		this.meta = {...meta, pattern: [...meta.pattern]};
 	}
@@ -94,20 +99,14 @@ export class MetronomeModal extends Modal {
 				})
 			);
 
+		// Labelled like the settings above it rather than as a heading, so the three read as one list.
 		new Setting(contentEl)
 			.setName("Emphasis")
-			.setDesc("Click a beat to step it through accented, normal and silent.")
-			.setHeading();
+			.setDesc("Click a beat to step it through accented, normal and silent, and hear it.");
 
+		// The same shape the playback controls show, drawn over the beat it belongs to.
+		this.readoutEl = contentEl.createDiv({cls: "chord-sheet-emphasis-readout"});
 		this.beatsEl = contentEl.createDiv({cls: "chord-sheet-emphasis-beats"});
-		this.patternEl = contentEl.createDiv({cls: "chord-sheet-emphasis-pattern"});
-
-		const legendEl = contentEl.createDiv({cls: "chord-sheet-emphasis-legend"});
-		for (const state of ["accent", "normal", "silent"] as Beat[]) {
-			const item = legendEl.createDiv({cls: "chord-sheet-emphasis-legend-item"});
-			item.createSpan({cls: ["chord-sheet-emphasis-swatch", `is-${state}`]});
-			item.createSpan({text: STATE_LABEL[state]});
-		}
 
 		this.renderBeats();
 	}
@@ -137,26 +136,30 @@ export class MetronomeModal extends Modal {
 	}
 
 	private renderBeats() {
-		const beatsEl = this.beatsEl;
-		if (!beatsEl) {
+		const {beatsEl, readoutEl} = this;
+		if (!beatsEl || !readoutEl) {
 			return;
 		}
 
 		beatsEl.empty();
+		readoutEl.empty();
+
 		this.meta.pattern.forEach((state, index) => {
+			readoutEl.createDiv({cls: ["chord-sheet-emphasis-readout-beat", `is-${state}`]});
+
 			const button = beatsEl.createEl("button", {
 				cls: ["chord-sheet-emphasis-beat", `is-${state}`],
 				text: String(index + 1)
 			});
-			setTooltip(button, `Beat ${index + 1}: ${STATE_LABEL[state]}`);
+			setTooltip(button, `Beat ${index + 1} is ${STATE_LABEL[state]}`);
 			button.addEventListener("click", () => {
 				const pattern = [...this.meta.pattern];
 				pattern[index] = NEXT_STATE[pattern[index]];
 				this.apply({pattern});
 				this.renderBeats();
+				// Hear the beat that was just set, rather than having to run the metronome to find out.
+				this.onPreview(pattern[index]);
 			});
 		});
-
-		this.patternEl?.setText(patternToString(this.meta));
 	}
 }
