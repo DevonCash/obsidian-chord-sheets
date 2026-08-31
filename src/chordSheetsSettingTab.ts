@@ -312,7 +312,7 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Highlight the current chord')
-			.setDesc('While the metronome or the autoscroll is running, highlight the chord being played. Chords sharing a measure divide it equally, and a chord stays highlighted until the next one starts.')
+			.setDesc('While the metronome or the autoscroll is running, highlight the chord being played. A measure divides equally between its slots, where a slot is a chord or a % holding the previous chord, so "| Em % % Am |" gives Em three beats and Am one.')
 			.addToggle(toggle => toggle
 				.setValue(this.plugin.settings.highlightCurrentChord)
 				.onChange(async value => {

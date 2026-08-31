@@ -85,40 +85,61 @@ function isBarLine(token: Token): boolean {
 }
 
 /**
- * Groups a chord line's chords by the measure they fall in. Measures without any chord (a bar holding
- * only a repeat marker, say) are kept as empty groups so later chords land on the right beat.
+ * One subdivision of a measure. A measure is divided equally between its slots, so `| Em % % Am |` in 4/4
+ * gives Em three beats and Am one: `%` (and `/`) hold the preceding chord for another slot.
  */
-function chordsByMeasure(tokenizedLine: TokenizedLine): ChordToken[][] {
-	const measures: ChordToken[][] = [];
-	let current: ChordToken[] = [];
-	let hasContent = false;
+type MeasureSlot = ChordToken | "continue";
 
-	const flush = () => {
-		if (hasContent) {
+/**
+ * Divides a chord line into measures, and each measure into slots. Measures holding no chord at all (a
+ * bar of nothing but repeat markers, or an `N.C.`) are kept, so that later chords land on the right beat.
+ */
+function measureSlots(tokenizedLine: TokenizedLine): MeasureSlot[][] {
+	const measures: MeasureSlot[][] = [];
+	let current: MeasureSlot[] = [];
+
+	const endMeasure = () => {
+		if (current.length > 0) {
 			measures.push(current);
+			current = [];
 		}
-		current = [];
-		hasContent = false;
 	};
 
 	for (const token of tokenizedLine.tokens) {
-		if (isBarLine(token)) {
-			flush();
-		} else if (isChordToken(token)) {
+		if (isChordToken(token)) {
 			current.push(token);
-			hasContent = true;
-		} else if (isRhythmToken(token)) {
-			hasContent = true;
+			continue;
+		}
+		if (!isRhythmToken(token)) {
+			continue;
+		}
+
+		// A rhythm token can run several markers together (`%%`, `%|`), so work through its characters.
+		let addedSlot = false;
+		let sawBarLine = false;
+		for (const char of token.value) {
+			if (char === "|") {
+				endMeasure();
+				sawBarLine = true;
+			} else if (char === "%" || char === "/") {
+				current.push("continue");
+				addedSlot = true;
+			}
+		}
+		// A marker such as N.C. occupies its measure without repeating anything.
+		if (!addedSlot && !sawBarLine) {
+			current.push("continue");
 		}
 	}
-	flush();
+	endMeasure();
 
 	return measures;
 }
 
 /**
- * Assigns a start beat to every chord on a line. Chords sharing a measure divide it equally, so
- * `| Em Am | C |` in 4/4 puts Em on beat 0, Am on beat 2 and C on beat 4.
+ * Assigns a start beat to every chord on a line. Measures divide equally between their slots, so
+ * `| Em Am | C |` in 4/4 puts Em on beat 0, Am on 2 and C on 4, while `| Em % % Am |` puts Em on 0 and
+ * Am on 3.
  */
 function chordStartBeats(
 	tokenizedLine: TokenizedLine,
@@ -128,10 +149,13 @@ function chordStartBeats(
 	const chords: {token: ChordToken, startBeat: number}[] = [];
 
 	if (tokenizedLine.tokens.some(token => isBarLine(token))) {
-		chordsByMeasure(tokenizedLine).forEach((measureChords, measureIndex) => {
-			measureChords.forEach((token, i) => {
-				const offset = (measureIndex + i / measureChords.length) * beatsPerBar;
-				chords.push({token, startBeat: lineStartBeat + offset});
+		measureSlots(tokenizedLine).forEach((slots, measureIndex) => {
+			slots.forEach((slot, slotIndex) => {
+				if (slot === "continue") {
+					return;
+				}
+				const offset = (measureIndex + slotIndex / slots.length) * beatsPerBar;
+				chords.push({token: slot, startBeat: lineStartBeat + offset});
 			});
 		});
 		return chords;

@@ -183,6 +183,46 @@ describe("chord occurrences", () => {
 		expect(chordBeats("| Em Am C G |")).toEqual([["Em", 0], ["Am", 1], ["C", 2], ["G", 3]]);
 	});
 
+	it("treats % within a bar as a beat slot holding the previous chord", () => {
+		// Em gets three of the four beats, Am the last.
+		expect(chordBeats("| Em % % Am |")).toEqual([["Em", 0], ["Am", 3]]);
+	});
+
+	it.each([
+		["| Em % Am % |", [["Em", 0], ["Am", 2]]],
+		["| Em % % % |", [["Em", 0]]],
+		["| Em % Am |", [["Em", 0], ["Am", 2 + 2 / 3]]],
+		["| Em % % Am | C % % % |", [["Em", 0], ["Am", 3], ["C", 4]]],
+	])("divides %p between its slots", (line, expected) => {
+		const beats = chordBeats(line);
+		expect(beats).toHaveLength(expected.length);
+		beats.forEach(([symbol, beat], i) => {
+			expect(symbol).toBe(expected[i][0]);
+			expect(beat).toBeCloseTo(expected[i][1] as number);
+		});
+	});
+
+	it("counts / as a beat slot too", () => {
+		expect(chordBeats("| Em / / Am |")).toEqual([["Em", 0], ["Am", 3]]);
+	});
+
+	it("scales slot division with the meter", () => {
+		// Four slots across a 12/8 bar: three eighths each.
+		expect(chordBeats("| Em % % Am |", 12)).toEqual([["Em", 0], ["Am", 9]]);
+		// Four slots across an 8/4 bar: two quarters each.
+		expect(chordBeats("| Em % % Am |", 8)).toEqual([["Em", 0], ["Am", 6]]);
+	});
+
+	it("keeps a slot-divided bar one measure long", () => {
+		const timeline = buildSongTimeline(block("| Em % % Am |"), "chords", markers, 4);
+		expect(timeline.entries[0].measures).toBe(1);
+		expect(timeline.totalBeats).toBe(4);
+	});
+
+	it("keeps an N.C. bar occupying its measure", () => {
+		expect(chordBeats("| N.C. | Am |")).toEqual([["Am", 4]]);
+	});
+
 	it("keeps later chords on the beat when a bar holds only repeat markers", () => {
 		// The repeat bars belong to Em, which stays current until Am starts on the fourth bar.
 		expect(chordBeats("| Em | % | % | Am |")).toEqual([["Em", 0], ["Am", 12]]);
