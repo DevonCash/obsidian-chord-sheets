@@ -49,10 +49,11 @@ export class TransportControl {
 		this.scrollButton = containerEl.createEl("button", {
 			cls: ["chord-sheet-transport-button", "chord-sheet-transport-play"]
 		});
-		this.scrollButton.addEventListener("click", () => {
-			this.playback.isRunning ? this.playback.stopScroll() : this.playback.startScroll();
+		// One transport control: it starts and stops the scroll and the click together.
+		this.scrollButton.addEventListener("click", () => void (async () => {
+			await this.playback.togglePlay();
 			this.update();
-		});
+		})());
 
 		const songMeta = this.playback.songMeta;
 		this.renderedWithMetronome = !!songMeta;
@@ -72,12 +73,11 @@ export class TransportControl {
 
 	private renderMetronomeControls(containerEl: HTMLElement, songMeta: SongMeta) {
 		this.metronomeButton = containerEl.createEl("button", {cls: "chord-sheet-transport-button"});
-		this.metronomeButton.addEventListener("click", () => void (async () => {
-			this.playback.isMetronomeRunning
-				? this.playback.stopMetronome()
-				: await this.playback.startMetronome();
+		// Only silences the click; it never starts or stops the song.
+		this.metronomeButton.addEventListener("click", () => {
+			this.playback.toggleMute();
 			this.update();
-		})());
+		});
 
 		// The bar is two rows tall, so tempo and time signature stack into it side by side.
 		const fieldsEl = containerEl.createDiv({cls: "chord-sheet-transport-fields"});
@@ -234,17 +234,17 @@ export class TransportControl {
 
 	update() {
 		if (this.scrollButton) {
-			const running = this.playback.isRunning;
-			setIcon(this.scrollButton, running ? "pause-circle" : "play-circle");
-			setTooltip(this.scrollButton, running ? "Pause autoscroll" : "Start autoscroll");
-			this.scrollButton.toggleClass("is-active", running);
+			const playing = this.playback.isPlaying;
+			setIcon(this.scrollButton, playing ? "pause-circle" : "play-circle");
+			setTooltip(this.scrollButton, playing ? "Pause" : "Play");
+			this.scrollButton.toggleClass("is-active", playing);
 		}
 
 		if (this.metronomeButton) {
-			const running = this.playback.isMetronomeRunning;
-			setIcon(this.metronomeButton, running ? "volume-2" : "volume-x");
-			setTooltip(this.metronomeButton, running ? "Stop metronome" : "Start metronome");
-			this.metronomeButton.toggleClass("is-active", running);
+			const muted = this.playback.isMuted;
+			setIcon(this.metronomeButton, muted ? "volume-x" : "volume-2");
+			setTooltip(this.metronomeButton, muted ? "Unmute metronome" : "Mute metronome");
+			this.metronomeButton.toggleClass("is-active", !muted);
 		}
 	}
 

@@ -216,7 +216,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 		this.addCommand({
 			id: 'toggle-autoscroll',
-			name: 'Toggle autoscroll',
+			name: 'Play or pause',
 			checkCallback: (checking) => {
 				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (!view) {
@@ -224,7 +224,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 				}
 
 				if (!checking) {
-					this.toggleAutoscroll(view);
+					void this.togglePlay(view);
 				}
 
 				return true;
@@ -266,7 +266,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 		this.addCommand({
 			id: 'toggle-metronome',
-			name: 'Toggle metronome',
+			name: 'Mute or unmute the metronome',
 			checkCallback: (checking) => {
 				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (!view?.file) {
@@ -274,7 +274,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 				}
 
 				if (!checking) {
-					void this.toggleMetronome(view);
+					this.toggleMute(view);
 				}
 
 				return true;
@@ -397,7 +397,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		}
 
 		const playbackControl = this.viewPlaybackControlMap.get(view);
-		if (!playbackControl || !playbackControl.isRunning) {
+		if (!playbackControl || !playbackControl.isPlaying) {
 			return false;
 		}
 
@@ -448,17 +448,8 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		this.getPlaybackControl(view)?.toggleControls();
 	}
 
-	private toggleAutoscroll(view: MarkdownView) {
-		const playbackControl = this.getPlaybackControl(view);
-		if (!playbackControl) {
-			return;
-		}
-
-		if (playbackControl.isRunning) {
-			playbackControl.stopScroll();
-		} else {
-			playbackControl.startScroll();
-		}
+	private async togglePlay(view: MarkdownView) {
+		await this.getPlaybackControl(view)?.togglePlay();
 	}
 
 	/**
@@ -505,17 +496,16 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		);
 	}
 
-	private async toggleMetronome(view: MarkdownView) {
+	private toggleMute(view: MarkdownView) {
 		const playbackControl = this.getPlaybackControl(view);
 		if (!playbackControl) {
 			return;
 		}
-
-		if (playbackControl.isMetronomeRunning) {
-			playbackControl.stopMetronome();
-		} else {
-			await playbackControl.startMetronome();
-		}
+		playbackControl.toggleMute();
+		// Remembered across notes and sessions: whether you want to hear a click is a standing preference,
+		// not something to re-set every time.
+		this.settings.metronomeMuted = playbackControl.isMuted;
+		void this.saveSettings();
 	}
 
 	private updatePlaybackButtons(view: MarkdownView | MarkdownFileInfo) {
@@ -539,10 +529,11 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			() => this.togglePlaybackControls(view)
 		);
 
+		const muted = playbackControl?.isMuted ?? this.settings.metronomeMuted;
 		this.updateActionButton(
 			view, ".chord-sheet-metronome-action", this.settings.showMetronomeButton, hasChordBlocks,
-			playbackControl?.isMetronomeRunning ? "volume-2" : "volume-x", "Toggle metronome",
-			() => void this.toggleMetronome(view)
+			muted ? "volume-x" : "volume-2", muted ? "Unmute metronome" : "Mute metronome",
+			() => this.toggleMute(view)
 		);
 	}
 

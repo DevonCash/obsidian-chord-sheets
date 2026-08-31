@@ -25,7 +25,10 @@ export class PlaybackControl extends Component {
 	private frameId: number | null = null;
 	private lastFrameTime = 0;
 
-	private scrolling = false;
+	/** Whether the song is running: the scroll, the click and the chord highlight all follow this. */
+	private playing = false;
+	/** Whether the click is silenced. Independent of whether the song is running. */
+	private muted: boolean;
 	/** Whether the on-screen controls are showing. Independent of whether anything is playing. */
 	private controlsVisible = false;
 	/** Scroll offset accumulated from the user scrolling by hand, so nudging the view re-anchors it. */
@@ -49,18 +52,19 @@ export class PlaybackControl extends Component {
 	) {
 		super();
 		this.transport = new Transport(this._songMeta ?? defaultSongMeta(settings));
-		this.click = new MetronomeClick(this.transport, settings.metronomeVolume);
+		this.muted = settings.metronomeMuted;
+		this.click = new MetronomeClick(this.transport, settings.metronomeVolume, this.muted);
 		this.highlighter = new ChordHighlighter(view);
 		this.pacer = this.createPacer();
 		view.addChild(this);
 	}
 
-	get isRunning(): boolean {
-		return this.scrolling;
+	get isPlaying(): boolean {
+		return this.playing;
 	}
 
-	get isMetronomeRunning(): boolean {
-		return this.click.isRunning;
+	get isMuted(): boolean {
+		return this.muted;
 	}
 
 	get isControlVisible(): boolean {
@@ -156,69 +160,76 @@ export class PlaybackControl extends Component {
 		}
 	}
 
-	private get isPlaying(): boolean {
-		return this.scrolling || this.click.isRunning;
-	}
 
-	startScroll() {
-		if (this.scrolling) {
+
+	/** Starts the song: the scroll, the click and the chord highlight all run off the one transport. */
+	async play() {
+		if (this.playing) {
 			return;
 		}
-		this.scrolling = true;
+
+		// Must happen in response to a user gesture, otherwise the audio context stays suspended. Done
+		// even when muted, so unmuting mid-song does not need a gesture of its own.
+		const audioContext = await this.click.prepareAudio();
+		this.transport.setAudioContext(audioContext);
+
+		this.playing = true;
 		this.controlsVisible = true;
 		this.userScrollOffset = 0;
 		this.lastAppliedScrollTop = null;
 		// Build from the current document, so edits made since the last run are accounted for.
 		this.pacer = this.createPacer();
+
 		this.transport.start();
+		// A note with no tempo has no metronome to run — play scrolls it and nothing more.
+		if (this._songMeta) {
+			this.click.start();
+		}
 		this.showControl();
 		this.startFrames();
 		this.events.trigger(PLAYBACK_CHANGED_EVENT);
 	}
 
-	stopScroll() {
-		if (!this.scrolling) {
+	/** Pauses where it stands, leaving the controls up. */
+	pause() {
+		if (!this.playing) {
 			return;
 		}
-		this.scrolling = false;
-		this.stopFramesIfIdle();
-		this.pauseTransportIfIdle();
-		this.updateControlVisibility();
-		this.events.trigger(PLAYBACK_CHANGED_EVENT);
-	}
-
-	async startMetronome() {
-		if (this.click.isRunning) {
-			return;
-		}
-		// Must happen in response to a user gesture, otherwise the audio context stays suspended.
-		const audioContext = await this.click.prepareAudio();
-		this.controlsVisible = true;
-		this.transport.setAudioContext(audioContext);
-		// Rebuild so the chord highlight follows edits made since the last run.
-		this.pacer = this.createPacer();
-		this.transport.start();
-		this.click.start();
-		this.showControl();
-		this.startFrames();
-		this.events.trigger(PLAYBACK_CHANGED_EVENT);
-	}
-
-	stopMetronome() {
-		if (!this.click.isRunning) {
-			return;
-		}
+		this.playing = false;
 		this.click.stop();
-		this.stopFramesIfIdle();
-		this.pauseTransportIfIdle();
-		this.updateControlVisibility();
+		this.stopFrames();
+		this.transport.pause();
+		this.control?.update();
 		this.events.trigger(PLAYBACK_CHANGED_EVENT);
+	}
+
+	async togglePlay() {
+		if (this.playing) {
+			this.pause();
+		} else {
+			await this.play();
+		}
+	}
+
+	/** Silences the click, or brings it back. Never starts or stops the song. */
+	setMuted(muted: boolean) {
+		if (muted === this.muted) {
+			return;
+		}
+		this.muted = muted;
+		this.click.setMuted(muted);
+		this.control?.update();
+		this.events.trigger(PLAYBACK_CHANGED_EVENT);
+	}
+
+	toggleMute() {
+		this.setMuted(!this.muted);
 	}
 
 	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */
 	stop() {
-		const wasShowing = this.isPlaying || this.controlsVisible;
-		this.scrolling = false;
+		const wasShowing = this.playing || this.controlsVisible;
+		this.playing = false;
 		this.controlsVisible = false;
 		this.click.stop();
 		this.stopFrames();
@@ -243,18 +254,6 @@ export class PlaybackControl extends Component {
 		this.click.destroy();
 		this.hideControl();
 		super.onunload();
-	}
-
-	private pauseTransportIfIdle() {
-		if (!this.isPlaying) {
-			this.transport.pause();
-		}
-	}
-
-	private stopFramesIfIdle() {
-		if (!this.isPlaying) {
-			this.stopFrames();
-		}
 	}
 
 	private createPacer(): ScrollPacer {
@@ -299,7 +298,7 @@ export class PlaybackControl extends Component {
 
 			this.updateChordHighlight();
 
-			const scrollElem = this.scrolling ? this.getScrollElement() : null;
+			const scrollElem = this.getScrollElement();
 			if (!scrollElem) {
 				return;
 			}
@@ -346,11 +345,6 @@ export class PlaybackControl extends Component {
 			this.control.render();
 		}
 		this.control.update();
-	}
-
-	/** Pausing leaves the controls up; only hiding them takes them away. */
-	private updateControlVisibility() {
-		this.control?.update();
 	}
 
 	private hideControl() {

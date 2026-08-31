@@ -22,7 +22,7 @@ export class MetronomeClick {
 	/** Index of the next beat to be scheduled. */
 	private nextBeat = 0;
 
-	constructor(private transport: Transport, private volume: number) {
+	constructor(private transport: Transport, private volume: number, private muted = false) {
 	}
 
 	get isRunning(): boolean {
@@ -31,6 +31,14 @@ export class MetronomeClick {
 
 	setVolume(volume: number) {
 		this.volume = volume;
+	}
+
+	/**
+	 * Silences the click without stopping it. The scheduler keeps running so that unmuting picks up on
+	 * the beat rather than having to catch up.
+	 */
+	setMuted(muted: boolean) {
+		this.muted = muted;
 	}
 
 	/**
@@ -100,7 +108,7 @@ export class MetronomeClick {
 		// Silent beats still advance the count, so a 12/8 "X__x__x__x__" sounds four times per bar while
 		// the transport keeps running on eighth notes.
 		const emphasis = pattern[((beat % beatsPerBar) + beatsPerBar) % beatsPerBar];
-		if (emphasis === "silent" || this.volume <= 0) {
+		if (emphasis === "silent" || this.muted || this.volume <= 0) {
 			return;
 		}
 
