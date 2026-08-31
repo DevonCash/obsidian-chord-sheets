@@ -1,11 +1,12 @@
-import {MarkdownView, setIcon, setTooltip, SliderComponent} from "obsidian";
+import {debounce, MarkdownView, setIcon, setTooltip, SliderComponent} from "obsidian";
+import {EmphasisModal} from "./emphasisModal";
 import type {PlaybackControl} from "./playbackControl";
 import {AUTOSCROLL_STEPS} from "./scrollPacer";
 import {
+	Beat,
 	EMPHASIS_PROPERTY,
 	MAX_TEMPO,
 	MIN_TEMPO,
-	parseEmphasis,
 	parseTimeSignature,
 	patternToString,
 	SongMeta,
@@ -26,7 +27,7 @@ export class TransportControl {
 	private slider: SliderComponent | null = null;
 	private tempoInput: HTMLInputElement | null = null;
 	private timeSignatureInput: HTMLInputElement | null = null;
-	private emphasisInput: HTMLInputElement | null = null;
+	private emphasisButton: HTMLElement | null = null;
 	private scrollButton: HTMLElement | null = null;
 	private metronomeButton: HTMLElement | null = null;
 	/** Whether the currently rendered bar has metronome controls rather than the speed slider. */
@@ -77,7 +78,10 @@ export class TransportControl {
 			this.update();
 		})());
 
-		this.tempoInput = this.createField(containerEl, "Tempo (BPM)", "chord-sheet-transport-tempo",
+		// The bar is two rows tall, so tempo and time signature stack into it side by side.
+		const fieldsEl = containerEl.createDiv({cls: "chord-sheet-transport-fields"});
+
+		this.tempoInput = this.createField(fieldsEl, "Tempo (BPM)", "chord-sheet-transport-tempo",
 			String(songMeta.bpm), value => {
 				const bpm = parseFloat(value);
 				return isNaN(bpm) || bpm < MIN_TEMPO || bpm > MAX_TEMPO ? null : {[TEMPO_PROPERTY]: bpm};
@@ -86,17 +90,59 @@ export class TransportControl {
 		this.tempoInput.min = String(MIN_TEMPO);
 		this.tempoInput.max = String(MAX_TEMPO);
 
-		this.timeSignatureInput = this.createField(containerEl, "Time signature",
+		this.timeSignatureInput = this.createField(fieldsEl, "Time signature",
 			"chord-sheet-transport-time-signature", timeSignatureToString(songMeta), value =>
 				parseTimeSignature(value) ? {[TIME_SIGNATURE_PROPERTY]: value.trim()} : null
 		);
 
-		this.emphasisInput = this.createField(containerEl, "Emphasis: X accent, x normal, _ silent",
-			"chord-sheet-transport-emphasis", patternToString(songMeta), value => {
-				const beatsPerBar = parseTimeSignature(this.timeSignatureInput?.value)?.beatsPerBar
-					?? songMeta.beatsPerBar;
-				return parseEmphasis(value, beatsPerBar) ? {[EMPHASIS_PROPERTY]: value.trim()} : null;
-			});
+		this.emphasisButton = containerEl.createEl("button", {cls: "chord-sheet-transport-emphasis"});
+		this.emphasisButton.addEventListener("click", () => this.openEmphasisModal());
+		this.renderEmphasis(songMeta);
+	}
+
+	/**
+	 * Shows the pattern as one element per beat, so the bar carries the same shape the dialog edits.
+	 */
+	private renderEmphasis(songMeta: SongMeta) {
+		const button = this.emphasisButton;
+		if (!button) {
+			return;
+		}
+
+		button.empty();
+		songMeta.pattern.forEach(beat => button.createSpan({
+			cls: ["chord-sheet-transport-emphasis-beat", `is-${beat}`]
+		}));
+		setTooltip(button, `Emphasis: ${patternToString(songMeta)} — click to edit`);
+	}
+
+	private openEmphasisModal() {
+		const songMeta = this.playback.songMeta;
+		if (!songMeta) {
+			return;
+		}
+
+		// Written back as the pattern is edited, but not on every click: the metronome hears each change
+		// straight away, while the note is only rewritten once the clicking stops.
+		const save = debounce(
+			(pattern: Beat[]) => this.saveProperties({
+				[EMPHASIS_PROPERTY]: patternToString({pattern})
+			}),
+			400, true
+		);
+
+		new EmphasisModal(
+			this.view.app, songMeta.beatsPerBar, songMeta.beatUnit, songMeta.pattern,
+			pattern => {
+				// Read the song back rather than reusing the copy captured when the dialog opened, so an
+				// edit made to the note meanwhile is not undone by a click in here.
+				const current = this.playback.songMeta ?? songMeta;
+				// Keep the running metronome and the bar in step ahead of the frontmatter write.
+				this.playback.setSongMeta({...current, pattern});
+				this.renderEmphasis({...current, pattern});
+				save(pattern);
+			}
+		).open();
 	}
 
 	/**
@@ -151,7 +197,7 @@ export class TransportControl {
 		if (songMeta) {
 			this.updateFieldValue(this.tempoInput, String(songMeta.bpm));
 			this.updateFieldValue(this.timeSignatureInput, timeSignatureToString(songMeta));
-			this.updateFieldValue(this.emphasisInput, patternToString(songMeta));
+			this.renderEmphasis(songMeta);
 		}
 	}
 
@@ -184,7 +230,7 @@ export class TransportControl {
 		this.slider = null;
 		this.tempoInput = null;
 		this.timeSignatureInput = null;
-		this.emphasisInput = null;
+		this.emphasisButton = null;
 		this.scrollButton = null;
 		this.metronomeButton = null;
 	}

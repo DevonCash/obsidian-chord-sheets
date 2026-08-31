@@ -878,8 +878,19 @@ svg.enharmonic-toggle {
 	box-shadow: 0 0 0 2px var(--chord-sheet-playing-chord-background-color, var(--text-selection));
 }
 
-/* Playback (autoscroll + metronome) controls: a bar along the bottom of the view */
+/* Playback (autoscroll + metronome) controls: a bar floating over the bottom of the view.
+   The editor fills the whole of .view-content, so a plain sibling would sit below the fold and never be
+   seen; the bar is taken out of flow and pinned over the content instead. */
+.view-content:has(> .chord-sheet-autoscroll-control) {
+	position: relative;
+}
+
 .chord-sheet-autoscroll-control {
+	position: absolute;
+	inset-inline: 0;
+	bottom: 0;
+	z-index: var(--layer-status-bar, 15);
+
 	display: flex;
 	justify-content: flex-end;
 	align-items: center;
@@ -887,9 +898,8 @@ svg.enharmonic-toggle {
 	padding-right: var(--size-4-5);
 	border-top: 1px solid var(--divider-color);
 	min-height: 3.2rem;
-	/* Sits below the editor without being squeezed by it. */
-	flex: 0 0 auto;
 
+	background-color: var(--background-primary);
 	color: var(--text-muted);
 	font-size: var(--file-header-font-size);
 
@@ -956,9 +966,138 @@ svg.enharmonic-toggle {
 	width: 3.5rem;
 }
 
-.chord-sheet-autoscroll-control input.chord-sheet-transport-emphasis {
-	width: 8rem;
+/* Tempo and time signature stack into the two-row bar. */
+.chord-sheet-transport-fields {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-2-1);
+}
+
+.chord-sheet-transport-fields input.chord-sheet-transport-field {
+	height: 1.35rem;
+}
+
+/* The emphasis pattern, drawn one mark per beat: tall for an accent, short for a normal beat and a
+   faint dot for a silent one, so the bar's rhythm is readable at a glance. */
+.chord-sheet-autoscroll-control button.chord-sheet-transport-emphasis {
+	display: flex;
+	align-items: flex-end;
+	gap: 2px;
+	height: 1.6rem;
+	padding: 0 var(--size-4-2);
+	box-shadow: none;
+	background: transparent;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-emphasis:hover {
+	background-color: var(--background-modifier-hover);
+}
+
+.chord-sheet-transport-emphasis-beat {
+	width: 3px;
+	border-radius: 1px;
+	background-color: var(--text-muted);
+}
+
+.chord-sheet-transport-emphasis-beat.is-accent {
+	height: 0.9rem;
+	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+}
+
+.chord-sheet-transport-emphasis-beat.is-normal {
+	height: 0.55rem;
+}
+
+.chord-sheet-transport-emphasis-beat.is-silent {
+	height: 3px;
+	opacity: 0.4;
+}
+
+/* Emphasis dialog */
+.chord-sheet-emphasis-hint {
+	margin-top: 0;
+	color: var(--text-muted);
+}
+
+.chord-sheet-emphasis-beats {
+	display: flex;
+	flex-wrap: wrap;
+	gap: var(--size-2-2);
+}
+
+button.chord-sheet-emphasis-beat {
+	width: 2.1rem;
+	height: 2.1rem;
+	padding: 0;
+	box-shadow: none;
+	border: 2px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background-color: transparent;
+	color: var(--text-muted);
+	font-variant-numeric: tabular-nums;
+	cursor: pointer;
+}
+
+button.chord-sheet-emphasis-beat.is-accent {
+	border-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+	color: var(--text-on-accent);
+	font-weight: var(--font-bold);
+}
+
+button.chord-sheet-emphasis-beat.is-normal {
+	border-color: var(--background-modifier-border-hover);
+	background-color: var(--background-modifier-border);
+	color: var(--text-normal);
+}
+
+button.chord-sheet-emphasis-beat.is-silent {
+	opacity: 0.5;
+}
+
+.chord-sheet-emphasis-pattern {
+	margin-top: var(--size-4-4);
 	font-family: var(--font-monospace);
+	font-size: var(--font-ui-large);
+	letter-spacing: 0.15em;
+	color: var(--text-muted);
+}
+
+.chord-sheet-emphasis-legend {
+	display: flex;
+	gap: var(--size-4-4);
+	margin-top: var(--size-4-3);
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.chord-sheet-emphasis-legend-item {
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+}
+
+.chord-sheet-emphasis-swatch {
+	width: 0.8rem;
+	height: 0.8rem;
+	border: 2px solid var(--background-modifier-border);
+	border-radius: 2px;
+}
+
+.chord-sheet-emphasis-swatch.is-accent {
+	border-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
+}
+
+.chord-sheet-emphasis-swatch.is-normal {
+	background-color: var(--background-modifier-border);
+}
+
+.chord-sheet-emphasis-swatch.is-silent {
+	opacity: 0.5;
 }
 
 .chord-sheet-autoscroll-control input.chord-sheet-transport-field-invalid {
