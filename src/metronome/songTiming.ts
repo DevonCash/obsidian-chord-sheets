@@ -39,6 +39,8 @@ export interface ChordOccurrence {
 	/** Absolute offsets of the chord symbol in the document, for highlighting in the editor. */
 	from: number;
 	to: number;
+	/** Index of the chord line this chord sits on, into SongTimeline.entries. */
+	entryIndex: number;
 	/** Position of the chord in the rendered output, for highlighting in reading mode. */
 	blockIndex: number;
 	blockStartLine: number;
@@ -229,6 +231,7 @@ export function buildSongTimeline(
 					// tokenizeLine was given a zero line index, so the token ranges are line-relative.
 					chords.push({
 						startBeat: beat,
+						entryIndex: entries.length - 1,
 						from: offset + token.range[0],
 						to: offset + token.range[1],
 						blockIndex,

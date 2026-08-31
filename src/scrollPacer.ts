@@ -5,7 +5,7 @@
 
 import {MarkdownView} from "obsidian";
 import {EditorView} from "@codemirror/view";
-import {entryIndexAtBeat, SongTimeline} from "./metronome/songTiming";
+import {chordAtBeat, entryIndexAtBeat, SongTimeline} from "./metronome/songTiming";
 import {Transport} from "./metronome/transport";
 import {renderedBlockLines} from "./renderedChordBlocks";
 
@@ -70,18 +70,33 @@ export class ConstantSpeedPacer implements ScrollPacer {
 }
 
 /**
- * Tempo-aware pacing. Every chord line is resolved to a vertical position, and the scroll is interpolated
- * between consecutive chord lines in proportion to the beats elapsed, so a line reaches the reading
- * anchor exactly as it starts being played.
+ * How a tempo-aware scroll positions the document.
+ *
+ * "chord" keeps the chord currently being played at the reading line: the view holds still while a chord
+ * sounds and glides on when the next one starts. "continuous" instead interpolates between consecutive
+ * chord lines in proportion to the beats elapsed, so the document moves at a steady crawl and each line
+ * arrives at the reading line exactly as it starts.
+ */
+export type TempoScrollMode = "chord" | "continuous";
+
+/** Time constant of the glide between chords, in milliseconds. */
+const CHORD_GLIDE_TAU_MS = 180;
+
+/**
+ * Tempo-aware pacing. Every chord line is resolved to a vertical position, which the two modes above then
+ * use differently.
  */
 export class TempoScrollPacer implements ScrollPacer {
 	private lineOffsets: number[] | null = null;
+	/** Eased scroll position, used by the "chord" mode so it glides rather than jumps between chords. */
+	private position: number | null = null;
 
 	constructor(
 		private view: MarkdownView,
 		private transport: Transport,
 		private timeline: SongTimeline,
-		private anchorFraction: number
+		private anchorFraction: number,
+		private mode: TempoScrollMode = "chord"
 	) {
 	}
 
@@ -94,12 +109,39 @@ export class TempoScrollPacer implements ScrollPacer {
 		this.lineOffsets = null;
 	}
 
-	desiredScrollTop(scrollElem: HTMLElement): number | null {
+	desiredScrollTop(scrollElem: HTMLElement, dtMs: number): number | null {
 		const offsets = this.getLineOffsets(scrollElem);
 		if (!offsets || offsets.length === 0) {
 			return null;
 		}
 
+		return this.mode === "chord"
+			? this.currentChordScrollTop(scrollElem, offsets, dtMs)
+			: this.interpolatedScrollTop(scrollElem, offsets);
+	}
+
+	/**
+	 * Holds the chord being played at the reading line. The target only moves when the song reaches a
+	 * chord on a different line, so the view stays put while a chord sounds; easing towards it turns that
+	 * step into a glide instead of a jump.
+	 */
+	private currentChordScrollTop(scrollElem: HTMLElement, offsets: number[], dtMs: number): number {
+		const chord = chordAtBeat(this.timeline, this.transport.currentBeat());
+		// Before the first chord, bring its line to the reading line and wait there.
+		const target = this.anchor(scrollElem, offsets[chord ? chord.entryIndex : 0]);
+
+		if (this.position === null) {
+			// Start from wherever the reader already is, and glide from there.
+			this.position = scrollElem.scrollTop;
+		}
+
+		// Frame-rate independent exponential easing.
+		this.position += (target - this.position) * (1 - Math.exp(-dtMs / CHORD_GLIDE_TAU_MS));
+		return this.position;
+	}
+
+	/** Moves at a steady crawl, interpolating between chord lines by the beats elapsed. */
+	private interpolatedScrollTop(scrollElem: HTMLElement, offsets: number[]): number {
 		const {entries} = this.timeline;
 		const beat = this.transport.currentBeat();
 		const index = entryIndexAtBeat(this.timeline, beat);

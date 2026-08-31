@@ -1,4 +1,5 @@
 import {Instrument} from "./instruments/types";
+import {TempoScrollMode} from "./scrollPacer";
 
 export type ShowAutoscrollButtonSetting = "never" | "chord-blocks" | "always";
 export type ShowChordOverviewSetting = "never" | "edit" | "preview" | "always";
@@ -36,6 +37,7 @@ export interface ChordSheetsSettings {
 	defaultTimeSignature: string;
 	defaultEmphasis: string;
 	tempoAwareAutoscroll: boolean;
+	tempoScrollMode: TempoScrollMode;
 	highlightCurrentChord: boolean;
 	scrollAnchorFraction: number;
 }
@@ -67,6 +69,7 @@ export const DEFAULT_SETTINGS: ChordSheetsSettings = {
 	defaultTimeSignature: "4/4",
 	defaultEmphasis: "X",
 	tempoAwareAutoscroll: true,
+	tempoScrollMode: "chord",
 	highlightCurrentChord: true,
-	scrollAnchorFraction: 0.3
+	scrollAnchorFraction: 0.5
 };

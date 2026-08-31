@@ -21,6 +21,18 @@ Open a note, then use the ribbon buttons at the top right, or the commands
 | [[05 - Notation edge cases]] | Bar-line and repeat notations, and lines that must stay lyrics |
 | [[06 - Long song]] | Long enough to actually scroll for a few minutes |
 
+## Two scrolling styles
+
+Settings -> Chord Sheets -> **Tempo-aware scrolling style** switches between:
+
+- **Hold the current chord at the reading line** (default) — the page stays
+  still while a chord sounds, then glides on when the next one starts.
+- **Scroll continuously at the song's pace** — a steady crawl, bringing each
+  chord line to the reading line exactly as it begins.
+
+**Reading position** sets where that reading line sits; 0.5 is the middle.
+Worth trying both on [[06 - Long song]], where the difference is obvious.
+
 ## Worth watching for
 
 - The click and the scroll must stay locked over a couple of minutes.

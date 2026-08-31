@@ -226,7 +226,8 @@ export class PlaybackControl extends Component {
 
 		if (this.timeline && this.timeline.entries.length > 0 && this.settings.tempoAwareAutoscroll) {
 			return new TempoScrollPacer(
-				this.view, this.transport, this.timeline, this.settings.scrollAnchorFraction
+				this.view, this.transport, this.timeline,
+				this.settings.scrollAnchorFraction, this.settings.tempoScrollMode
 			);
 		}
 		return new ConstantSpeedPacer(this._speed);

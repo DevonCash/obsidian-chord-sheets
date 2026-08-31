@@ -1,5 +1,5 @@
 import {App, debounce, PluginSettingTab, Setting, TextComponent} from "obsidian";
-import {AUTOSCROLL_STEPS} from "./scrollPacer";
+import {AUTOSCROLL_STEPS, TempoScrollMode} from "./scrollPacer";
 import {MAX_TEMPO, MIN_TEMPO, parseEmphasis, parseTimeSignature} from "./metronome/songMeta";
 import {
 	ChordSheetsSettings,
@@ -322,9 +322,26 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 				})
 			);
 
+		const scrollModeOptions: Record<TempoScrollMode, string> = {
+			chord: "Hold the current chord at the reading line",
+			continuous: "Scroll continuously at the song's pace"
+		};
+		new Setting(containerEl)
+			.setName('Tempo-aware scrolling style')
+			.setDesc("'Hold the current chord' keeps the chord being played at the reading line, so the page stays still while a chord sounds and glides on when the next one starts. 'Scroll continuously' instead moves at a steady crawl, bringing each chord line to the reading line exactly as it starts.")
+			.addDropdown(dropdown => dropdown
+				.addOptions(scrollModeOptions)
+				.setValue(this.plugin.settings.tempoScrollMode)
+				.onChange(async (value: TempoScrollMode) => {
+					this.plugin.stopAllPlayback();
+					this.plugin.settings.tempoScrollMode = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
 		new Setting(containerEl)
 			.setName('Reading position')
-			.setDesc('How far down the screen the chord line currently being played is held, as a fraction of the window height.')
+			.setDesc('How far down the screen the chord being played is held, as a fraction of the window height. 0.5 is the middle.')
 			.addSlider(slider => slider
 				.setLimits(0, 0.9, 0.05)
 				.setValue(this.plugin.settings.scrollAnchorFraction)
