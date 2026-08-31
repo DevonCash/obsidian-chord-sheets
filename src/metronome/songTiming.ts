@@ -31,26 +31,40 @@ export interface TimelineEntry {
 }
 
 /**
- * A single chord as it is played. A chord stays current until the next one starts, which is what makes a
- * bar of repeat markers (`| Em | % | % |`) hold the preceding chord.
+ * One subdivision of a measure as it is played — either a chord, or a marker holding the previous chord.
+ * Every slot is somewhere the song can be moved to, so a bar of nothing but repeat markers can be
+ * clicked just like a chord can.
  */
-export interface ChordOccurrence {
+export interface SlotOccurrence {
 	startBeat: number;
-	/** Absolute offsets of the chord symbol in the document, for highlighting in the editor. */
+	/** Absolute offsets of the slot's text in the document, for locating it in the editor. */
 	from: number;
 	to: number;
-	/** Index of the chord line this chord sits on, into SongTimeline.entries. */
+	/** Index of the chord line this slot sits on, into SongTimeline.entries. */
 	entryIndex: number;
-	/** Position of the chord in the rendered output, for highlighting in reading mode. */
 	blockIndex: number;
 	blockStartLine: number;
 	lineInBlock: number;
+	/**
+	 * Index of the slot's token among the line's chord and rhythm tokens, which both render as one
+	 * element each. Locates the slot in reading mode, where document offsets are not available.
+	 */
+	tokenIndexInLine: number;
+}
+
+/**
+ * A chord as it is played. A chord stays current until the next one starts, which is what makes a bar of
+ * repeat markers (`| Em | % | % |`) hold the preceding chord.
+ */
+export interface ChordOccurrence extends SlotOccurrence {
+	/** Index among the line's chords, for highlighting in reading mode. */
 	chordInLine: number;
 }
 
 export interface SongTimeline {
 	entries: TimelineEntry[];
 	chords: ChordOccurrence[];
+	slots: SlotOccurrence[];
 	totalBeats: number;
 	beatsPerBar: number;
 }
@@ -87,18 +101,26 @@ function isBarLine(token: Token): boolean {
 }
 
 /**
- * One subdivision of a measure. A measure is divided equally between its slots, so `| Em % % Am |` in 4/4
- * gives Em three beats and Am one: `%` (and `/`) hold the preceding chord for another slot.
+ * One subdivision of a measure: a chord, or a marker holding the previous one. A measure is divided
+ * equally between its slots, so `| Em % % Am |` in 4/4 gives Em three beats and Am one.
  */
-type MeasureSlot = ChordToken | "continue";
+interface LineSlot {
+	/** The chord occupying the slot, or null where a marker holds the previous chord. */
+	token: ChordToken | null;
+	/** Range of the slot's text within its line. */
+	range: [number, number];
+	tokenIndexInLine: number;
+}
 
 /**
  * Divides a chord line into measures, and each measure into slots. Measures holding no chord at all (a
  * bar of nothing but repeat markers, or an `N.C.`) are kept, so that later chords land on the right beat.
  */
-function measureSlots(tokenizedLine: TokenizedLine): MeasureSlot[][] {
-	const measures: MeasureSlot[][] = [];
-	let current: MeasureSlot[] = [];
+function measureSlots(tokenizedLine: TokenizedLine): LineSlot[][] {
+	const measures: LineSlot[][] = [];
+	let current: LineSlot[] = [];
+	// Chord and rhythm tokens each render as one element, so their shared index locates a slot on screen.
+	let tokenIndexInLine = 0;
 
 	const endMeasure = () => {
 		if (current.length > 0) {
@@ -109,28 +131,34 @@ function measureSlots(tokenizedLine: TokenizedLine): MeasureSlot[][] {
 
 	for (const token of tokenizedLine.tokens) {
 		if (isChordToken(token)) {
-			current.push(token);
+			current.push({token, range: token.range, tokenIndexInLine: tokenIndexInLine++});
 			continue;
 		}
 		if (!isRhythmToken(token)) {
 			continue;
 		}
 
+		const index = tokenIndexInLine++;
 		// A rhythm token can run several markers together (`%%`, `%|`), so work through its characters.
 		let addedSlot = false;
 		let sawBarLine = false;
-		for (const char of token.value) {
+		for (let i = 0; i < token.value.length; i++) {
+			const char = token.value[i];
 			if (char === "|") {
 				endMeasure();
 				sawBarLine = true;
 			} else if (char === "%" || char === "/") {
-				current.push("continue");
+				current.push({
+					token: null,
+					range: [token.range[0] + i, token.range[0] + i + 1],
+					tokenIndexInLine: index
+				});
 				addedSlot = true;
 			}
 		}
 		// A marker such as N.C. occupies its measure without repeating anything.
 		if (!addedSlot && !sawBarLine) {
-			current.push("continue");
+			current.push({token: null, range: token.range, tokenIndexInLine: index});
 		}
 	}
 	endMeasure();
@@ -139,37 +167,43 @@ function measureSlots(tokenizedLine: TokenizedLine): MeasureSlot[][] {
 }
 
 /**
- * Assigns a start beat to every chord on a line. Measures divide equally between their slots, so
+ * Assigns a start beat to every slot on a line. Measures divide equally between their slots, so
  * `| Em Am | C |` in 4/4 puts Em on beat 0, Am on 2 and C on 4, while `| Em % % Am |` puts Em on 0 and
  * Am on 3.
  */
-function chordStartBeats(
+function lineSlots(
 	tokenizedLine: TokenizedLine,
 	lineStartBeat: number,
 	beatsPerBar: number
-): {token: ChordToken, startBeat: number}[] {
-	const chords: {token: ChordToken, startBeat: number}[] = [];
+): (LineSlot & {startBeat: number})[] {
+	const slots: (LineSlot & {startBeat: number})[] = [];
 
 	if (tokenizedLine.tokens.some(token => isBarLine(token))) {
-		measureSlots(tokenizedLine).forEach((slots, measureIndex) => {
-			slots.forEach((slot, slotIndex) => {
-				if (slot === "continue") {
-					return;
-				}
-				const offset = (measureIndex + slotIndex / slots.length) * beatsPerBar;
-				chords.push({token: slot, startBeat: lineStartBeat + offset});
+		measureSlots(tokenizedLine).forEach((measure, measureIndex) => {
+			measure.forEach((slot, slotIndex) => {
+				const offset = (measureIndex + slotIndex / measure.length) * beatsPerBar;
+				slots.push({...slot, startBeat: lineStartBeat + offset});
 			});
 		});
-		return chords;
+		return slots;
 	}
 
-	// No bar lines: one measure per chord.
+	// No bar lines: one measure per chord, and markers carry no weight of their own.
+	let tokenIndexInLine = 0;
+	let chordCount = 0;
 	for (const token of tokenizedLine.tokens) {
 		if (isChordToken(token)) {
-			chords.push({token, startBeat: lineStartBeat + chords.length * beatsPerBar});
+			slots.push({
+				token,
+				range: token.range,
+				tokenIndexInLine: tokenIndexInLine++,
+				startBeat: lineStartBeat + chordCount++ * beatsPerBar
+			});
+		} else if (isRhythmToken(token)) {
+			tokenIndexInLine++;
 		}
 	}
-	return chords;
+	return slots;
 }
 
 function chordBlockFencePattern(languageSpecifier: string): RegExp {
@@ -192,6 +226,7 @@ export function buildSongTimeline(
 
 	const entries: TimelineEntry[] = [];
 	const chords: ChordOccurrence[] = [];
+	const slots: SlotOccurrence[] = [];
 	const lines = docText.split("\n");
 
 	let blockIndex = -1;
@@ -227,19 +262,24 @@ export function buildSongTimeline(
 			if (measures > 0) {
 				entries.push({blockIndex, blockStartLine, lineInBlock, docLine, measures, startBeat});
 
-				chordStartBeats(tokenizedLine, startBeat, beatsPerBar).forEach(({token, startBeat: beat}, i) => {
-					// tokenizeLine was given a zero line index, so the token ranges are line-relative.
-					chords.push({
-						startBeat: beat,
+				let chordInLine = 0;
+				for (const slot of lineSlots(tokenizedLine, startBeat, beatsPerBar)) {
+					// tokenizeLine was given a zero line index, so the slot ranges are line-relative.
+					const occurrence: SlotOccurrence = {
+						startBeat: slot.startBeat,
 						entryIndex: entries.length - 1,
-						from: offset + token.range[0],
-						to: offset + token.range[1],
+						from: offset + slot.range[0],
+						to: offset + slot.range[1],
 						blockIndex,
 						blockStartLine,
 						lineInBlock,
-						chordInLine: i
-					});
-				});
+						tokenIndexInLine: slot.tokenIndexInLine
+					};
+					slots.push(occurrence);
+					if (slot.token) {
+						chords.push({...occurrence, chordInLine: chordInLine++});
+					}
+				}
 
 				startBeat += measures * beatsPerBar;
 			}
@@ -248,7 +288,7 @@ export function buildSongTimeline(
 		lineInBlock++;
 	}
 
-	return {entries, chords, totalBeats: startBeat, beatsPerBar};
+	return {entries, chords, slots, totalBeats: startBeat, beatsPerBar};
 }
 
 /**
@@ -283,4 +323,26 @@ export function entryIndexAtBeat(timeline: SongTimeline, beat: number): number {
  */
 export function chordAtBeat(timeline: SongTimeline, beat: number): ChordOccurrence | null {
 	return timeline.chords[indexAtBeat(timeline.chords, beat)] ?? null;
+}
+
+/** The slot covering a document offset, so a click in the editor can be resolved to a beat. */
+export function slotAtOffset(timeline: SongTimeline, offset: number): SlotOccurrence | null {
+	return timeline.slots.find(slot => offset >= slot.from && offset <= slot.to) ?? null;
+}
+
+/**
+ * The slot rendered at a given place in reading mode. A token holding several markers together (`%%`)
+ * renders as one element covering more than one slot, in which case the first of them is returned.
+ */
+export function slotAtRenderedPosition(
+	timeline: SongTimeline,
+	blockStartLine: number,
+	lineInBlock: number,
+	tokenIndexInLine: number
+): SlotOccurrence | null {
+	return timeline.slots.find(slot =>
+		slot.blockStartLine === blockStartLine
+		&& slot.lineInBlock === lineInBlock
+		&& slot.tokenIndexInLine === tokenIndexInLine
+	) ?? null;
 }

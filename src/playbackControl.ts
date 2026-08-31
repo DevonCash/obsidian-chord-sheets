@@ -4,7 +4,14 @@ import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
 import {MetronomeClick} from "./metronome/click";
 import {Transport} from "./metronome/transport";
 import {parseSongMeta, SongMeta} from "./metronome/songMeta";
-import {buildSongTimeline, chordAtBeat, ChordOccurrence, SongTimeline} from "./metronome/songTiming";
+import {
+	buildSongTimeline,
+	chordAtBeat,
+	slotAtOffset,
+	slotAtRenderedPosition,
+	SlotOccurrence,
+	SongTimeline
+} from "./metronome/songTiming";
 import {ChordHighlighter} from "./chordHighlight";
 import {TransportControl} from "./transportControl";
 
@@ -84,27 +91,27 @@ export class PlaybackControl extends Component {
 	}
 
 	/**
-	 * Moves playback to a chord, so a phrase can be picked up from where it starts. The bar phase is
-	 * kept, so a chord falling on beat 3 is counted as beat 3.
+	 * Moves playback to a slot, so a phrase can be picked up from where it starts. The bar phase is kept,
+	 * so a slot falling on beat 3 is counted as beat 3. The highlight follows the chord governing that
+	 * slot, which for a bar of repeat markers is the chord they are holding.
 	 */
-	seekToChord(chord: ChordOccurrence) {
-		this.transport.seek(chord.startBeat);
+	seekToSlot(slot: SlotOccurrence) {
+		this.transport.seek(slot.startBeat);
 		this.click.resync();
-		this.highlighter.show(chord);
+		if (this.timeline) {
+			this.highlighter.show(chordAtBeat(this.timeline, slot.startBeat));
+		}
 	}
 
-	/** The chord whose symbol covers a document offset, if the song has one there. */
-	chordAtOffset(offset: number): ChordOccurrence | null {
-		return this.timeline?.chords.find(chord => offset >= chord.from && offset <= chord.to) ?? null;
+	/** The slot covering a document offset, if the song has one there. */
+	slotAtOffset(offset: number): SlotOccurrence | null {
+		return this.timeline && slotAtOffset(this.timeline, offset);
 	}
 
-	/** The chord rendered at a given place in reading mode. */
-	chordAtRenderedPosition(blockStartLine: number, lineInBlock: number, chordInLine: number): ChordOccurrence | null {
-		return this.timeline?.chords.find(chord =>
-			chord.blockStartLine === blockStartLine
-			&& chord.lineInBlock === lineInBlock
-			&& chord.chordInLine === chordInLine
-		) ?? null;
+	/** The slot rendered at a given place in reading mode. */
+	slotAtRenderedPosition(blockStartLine: number, lineInBlock: number, tokenIndexInLine: number): SlotOccurrence | null {
+		return this.timeline
+			&& slotAtRenderedPosition(this.timeline, blockStartLine, lineInBlock, tokenIndexInLine);
 	}
 
 	get songMeta(): SongMeta | null {

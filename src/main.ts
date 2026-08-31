@@ -34,6 +34,9 @@ import {instruments} from "./instruments/instruments";
 
 const AUTOSCROLL_SPEED_PROPERTY = "autoscroll-speed";
 
+/** Chords and rhythm markers are both places the song can be moved to by clicking. */
+const SLOT_SELECTOR = ".chord-sheet-chord, .chord-sheet-rhythm-marker";
+
 export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlugin {
 	declare settings: ChordSheetsSettings;
 	editorPlugin: ViewPlugin<ChordSheetsViewPlugin>;
@@ -129,8 +132,8 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 		this.registerDomEvent(document, "click", (event: MouseEvent) => {
 			const target = event.target as HTMLElement | null;
-			if (target?.closest(".chord-sheet-chord")) {
-				this.seekToClickedChord(target);
+			if (target?.closest(SLOT_SELECTOR)) {
+				this.seekToClickedSlot(target);
 			}
 		});
 
@@ -453,46 +456,48 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 	}
 
 	/**
-	 * Clicking a chord moves playback to it, so a phrase can be picked up from where it starts. Only
-	 * while the controls are up, so it does not interfere with ordinary editing.
+	 * Clicking a chord or a rhythm marker moves playback to it, so a phrase can be picked up from where
+	 * it starts — a bar of nothing but repeat markers is as clickable as a chord. Only while the controls
+	 * are up, so it does not interfere with ordinary editing.
 	 */
-	private seekToClickedChord(target: HTMLElement) {
+	private seekToClickedSlot(target: HTMLElement) {
 		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
 		const playbackControl = view && this.viewPlaybackControlMap.get(view);
 		if (!view || !playbackControl?.isControlVisible) {
 			return;
 		}
 
-		const chord = view.getMode() === "preview"
-			? this.renderedChordAt(playbackControl, target)
-			: this.editorChordAt(view, playbackControl, target);
+		const slot = view.getMode() === "preview"
+			? this.renderedSlotAt(playbackControl, target)
+			: this.editorSlotAt(view, playbackControl, target);
 
-		if (chord) {
-			playbackControl.seekToChord(chord);
+		if (slot) {
+			playbackControl.seekToSlot(slot);
 		}
 	}
 
-	private editorChordAt(view: MarkdownView, playbackControl: PlaybackControl, target: HTMLElement) {
+	private editorSlotAt(view: MarkdownView, playbackControl: PlaybackControl, target: HTMLElement) {
 		const editorView = view.editor?.cm as EditorView | undefined;
 		if (!editorView) {
 			return null;
 		}
-		return playbackControl.chordAtOffset(editorView.posAtDOM(target));
+		return playbackControl.slotAtOffset(editorView.posAtDOM(target));
 	}
 
-	private renderedChordAt(playbackControl: PlaybackControl, target: HTMLElement) {
-		const chordEl = target.closest(".chord-sheet-chord");
-		const lineEl = chordEl?.parentElement;
-		const blockEl = chordEl?.closest("[data-chord-sheet-block-line]") as HTMLElement | null;
-		if (!chordEl || !lineEl || !blockEl?.dataset.chordSheetBlockLine) {
+	private renderedSlotAt(playbackControl: PlaybackControl, target: HTMLElement) {
+		const slotEl = target.closest(SLOT_SELECTOR);
+		const lineEl = slotEl?.parentElement;
+		const blockEl = slotEl?.closest("[data-chord-sheet-block-line]") as HTMLElement | null;
+		if (!slotEl || !lineEl || !blockEl?.dataset.chordSheetBlockLine) {
 			return null;
 		}
 
 		const linesEl = lineEl.parentElement;
-		return playbackControl.chordAtRenderedPosition(
+		return playbackControl.slotAtRenderedPosition(
 			parseInt(blockEl.dataset.chordSheetBlockLine, 10),
 			linesEl ? Array.from(linesEl.children).indexOf(lineEl) : -1,
-			Array.from(lineEl.querySelectorAll(".chord-sheet-chord")).indexOf(chordEl)
+			// Chords and rhythm markers render as one element each, in the order they were tokenized.
+			Array.from(lineEl.querySelectorAll(SLOT_SELECTOR)).indexOf(slotEl)
 		);
 	}
 

@@ -3,7 +3,9 @@ import {
 	chordAtBeat,
 	countMeasures,
 	entryIndexAtBeat,
-	LineMarkerSettings
+	LineMarkerSettings,
+	slotAtOffset,
+	slotAtRenderedPosition
 } from "../src/metronome/songTiming";
 import {tokenizeLine} from "../src/sheet-parsing/tokenizeLine";
 import {DEFAULT_CHORD_LINE_MARKER, DEFAULT_TEXT_LINE_MARKER} from "../src/chordSheetsSettings";
@@ -310,5 +312,71 @@ describe("chordAtBeat", () => {
 	it("carries on into the next line", () => {
 		expect(at(8)).toEqual([8, 0, 1]);
 		expect(at(999)).toEqual([8, 0, 1]);
+	});
+});
+
+describe("slots", () => {
+	// Every slot is somewhere the song can be moved to, including bars holding only repeat markers.
+	const doc = block("| Em | % | % | Am |");
+	const timeline = buildSongTimeline(doc, "chords", markers, 4);
+
+	it("gives each repeat bar a slot of its own, on its own beat", () => {
+		expect(timeline.slots.map(s => [doc.slice(s.from, s.to), s.startBeat])).toEqual([
+			["Em", 0], ["%", 4], ["%", 8], ["Am", 12]
+		]);
+	});
+
+	it("still reports only the chords as chords", () => {
+		expect(timeline.chords.map(c => doc.slice(c.from, c.to))).toEqual(["Em", "Am"]);
+	});
+
+	it("resolves a click in the editor to the slot under it", () => {
+		for (const [text, beat] of [["Em", 0], ["%", 4], ["Am", 12]] as [string, number][]) {
+			const offset = doc.indexOf(text, text === "%" ? 0 : undefined);
+			expect(slotAtOffset(timeline, offset)?.startBeat).toBe(beat);
+		}
+		// The second repeat bar, not the first.
+		expect(slotAtOffset(timeline, doc.indexOf("%", doc.indexOf("%") + 1))?.startBeat).toBe(8);
+	});
+
+	it("returns nothing for a click outside any slot", () => {
+		expect(slotAtOffset(timeline, 0)).toBeNull();
+	});
+
+	it("resolves a click in reading mode by the element's position in its line", () => {
+		// Chords and rhythm markers render one element each, in tokenized order:
+		// | Em | % | % | Am |  ->  0:|  1:Em  2:|  3:%  4:|  5:%  6:|  7:Am  8:|
+		const at = (tokenIndex: number) =>
+			slotAtRenderedPosition(timeline, 0, 0, tokenIndex)?.startBeat;
+		expect(at(1)).toBe(0);
+		expect(at(3)).toBe(4);
+		expect(at(5)).toBe(8);
+		expect(at(7)).toBe(12);
+	});
+
+	it("has no slot for a bare bar line, which is a divider rather than a beat", () => {
+		expect(slotAtRenderedPosition(timeline, 0, 0, 0)).toBeNull();
+		expect(slotAtRenderedPosition(timeline, 0, 0, 2)).toBeNull();
+	});
+
+	it("splits markers written together into a slot each", () => {
+		const tight = block("| Em %% Am |");
+		const tl = buildSongTimeline(tight, "chords", markers, 4);
+		// Four slots across the bar: Em, two repeats, Am.
+		expect(tl.slots.map(s => [tight.slice(s.from, s.to), s.startBeat])).toEqual([
+			["Em", 0], ["%", 1], ["%", 2], ["Am", 3]
+		]);
+	});
+
+	it("keeps a slash slot seekable too", () => {
+		const strummed = block("| Em / / / |");
+		const tl = buildSongTimeline(strummed, "chords", markers, 4);
+		expect(tl.slots.map(s => s.startBeat)).toEqual([0, 1, 2, 3]);
+	});
+
+	it("has no slots for a line whose markers carry no measure", () => {
+		// Without bar lines a line is measured by its chords, so markers weigh nothing.
+		const tl = buildSongTimeline(block("Em Am"), "chords", markers, 4);
+		expect(tl.slots.map(s => s.startBeat)).toEqual([0, 4]);
 	});
 });
