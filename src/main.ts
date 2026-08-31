@@ -3,7 +3,7 @@
 import {addIcon, debounce, Editor, MarkdownFileInfo, MarkdownView, Notice, Plugin, TFile, View} from 'obsidian';
 import {EditorView, ViewPlugin} from "@codemirror/view";
 import {ChordBlockPostProcessorView} from "./chordBlockPostProcessorView";
-import {ChordSheetsSettings, DEFAULT_SETTINGS} from "./chordSheetsSettings";
+import {ChordSheetsSettings, DEFAULT_SETTINGS, ShowAutoscrollButtonSetting} from "./chordSheetsSettings";
 import {Extension} from "@codemirror/state";
 import {
 	chordSheetEditorPlugin,
@@ -13,7 +13,16 @@ import {
 	TransposeEventDetail
 } from "./editor-extension/chordSheetsViewPlugin";
 import {InstrumentChangeEventDetail} from "./editor-extension/chordBlockToolsWidget";
-import {AutoscrollControl, SPEED_CHANGED_EVENT} from "./autoscrollControl";
+import {PLAYBACK_CHANGED_EVENT, PlaybackControl, SPEED_CHANGED_EVENT} from "./playbackControl";
+import {
+	EMPHASIS_PROPERTY,
+	MAX_TEMPO,
+	MIN_TEMPO,
+	parseSongMeta,
+	SongMeta,
+	TEMPO_PROPERTY,
+	TIME_SIGNATURE_PROPERTY
+} from "./metronome/songMeta";
 import {ChordSheetsSettingTab} from "./chordSheetsSettingTab";
 import {IChordSheetsPlugin} from "./chordSheetsPluginInterface";
 import {chordSheetsEditorExtension} from "./editor-extension/chordSheetsEditorExtension";
@@ -30,7 +39,8 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 	editorPlugin: ViewPlugin<ChordSheetsViewPlugin>;
 	editorExtension: Extension[] | null;
 
-	viewAutoscrollControlMap = new WeakMap<View, AutoscrollControl>();
+	viewPlaybackControlMap = new WeakMap<View, PlaybackControl>();
+	private tapTimes: number[] = [];
 
 	async onload() {
 		addCustomChordTypes();
@@ -111,25 +121,38 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 		// Handle obsidian events
 
-		const debounceAutoscrollUpdate = debounce((view: View | MarkdownFileInfo | null) => {
-			this.stopAllAutoscrolls();
+		// Rebuilding the action buttons is cheap and must follow edits, but stopping playback must not:
+		// killing the metronome and scroll on every keystroke would make them unusable while editing.
+		const debouncePlaybackUpdate = debounce((view: View | MarkdownFileInfo | null) => {
 			if (view instanceof MarkdownView) {
-				this.updateAutoscrollButton(view);
+				this.viewPlaybackControlMap.get(view)?.invalidateGeometry();
+				this.updatePlaybackButtons(view);
 			}
 		}, 100, false);
 
 
 		this.registerEvent(
 			this.app.workspace.on("active-leaf-change", (leaf) => {
+				this.stopAllPlayback();
 				if (leaf?.view) {
-					debounceAutoscrollUpdate(leaf.view);
+					debouncePlaybackUpdate(leaf.view);
 				}
 			})
 		);
 
 		this.registerEvent(
 			this.app.workspace.on("editor-change", (_editor, view) => {
-				debounceAutoscrollUpdate(view);
+				debouncePlaybackUpdate(view);
+			})
+		);
+
+		// Editing the note's properties should take effect immediately, without a restart.
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (file) => {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (view?.file === file) {
+					this.viewPlaybackControlMap.get(view)?.setSongMeta(this.getSongMetaFromFrontmatter(file));
+				}
 			})
 		);
 
@@ -213,8 +236,8 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 					return;
 				}
 
-				const autoscrollControl = this.viewAutoscrollControlMap.get(view);
-				const speed = autoscrollControl?.speed ?? this.settings.autoscrollDefaultSpeed;
+				const playbackControl = this.viewPlaybackControlMap.get(view);
+				const speed = playbackControl?.speed ?? this.settings.autoscrollDefaultSpeed;
 
 
 				if (!checking) {
@@ -225,11 +248,64 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			}
 		});
 
+		this.addCommand({
+			id: 'toggle-metronome',
+			name: 'Toggle metronome',
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (!view?.file) {
+					return false;
+				}
+
+				if (!checking) {
+					void this.toggleMetronome(view);
+				}
+
+				return true;
+			}
+		});
+
+		this.addCommand({
+			id: 'tempo-increase',
+			name: 'Increase tempo by 5 BPM',
+			checkCallback: (checking) => this.adjustTempoCommand(5, checking)
+		});
+
+		this.addCommand({
+			id: 'tempo-decrease',
+			name: 'Decrease tempo by 5 BPM',
+			checkCallback: (checking) => this.adjustTempoCommand(-5, checking)
+		});
+
+		this.addCommand({
+			id: 'tap-tempo',
+			name: 'Tap tempo',
+			checkCallback: (checking) => {
+				const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (!view?.file) {
+					return false;
+				}
+
+				if (!checking) {
+					this.tapTempo(view.file);
+				}
+
+				return true;
+			}
+		});
+
 
 		this.addSettingTab(new ChordSheetsSettingTab(this.app, this));
 
-		if (this.getMetadataType(AUTOSCROLL_SPEED_PROPERTY) !== "number") {
-			this.app.metadataTypeManager.setType(AUTOSCROLL_SPEED_PROPERTY, "number");
+		this.registerMetadataType(AUTOSCROLL_SPEED_PROPERTY, "number");
+		this.registerMetadataType(TEMPO_PROPERTY, "number");
+		this.registerMetadataType(TIME_SIGNATURE_PROPERTY, "text");
+		this.registerMetadataType(EMPHASIS_PROPERTY, "text");
+	}
+
+	private registerMetadataType(property: string, type: "number" | "text") {
+		if (this.getMetadataType(property) !== type) {
+			this.app.metadataTypeManager.setType(property, type);
 		}
 	}
 
@@ -304,14 +380,14 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			return false;
 		}
 
-		const autoscrollControl = this.viewAutoscrollControlMap.get(view);
-		if (!autoscrollControl || !autoscrollControl.isRunning) {
+		const playbackControl = this.viewPlaybackControlMap.get(view);
+		if (!playbackControl || !playbackControl.isRunning) {
 			return false;
 		}
 
 		if (!checking) {
-			if (autoscrollControl) {
-				action === 'increase' ? autoscrollControl.increaseSpeed() : autoscrollControl.decreaseSpeed();
+			if (playbackControl) {
+				action === 'increase' ? playbackControl.increaseSpeed() : playbackControl.decreaseSpeed();
 			}
 		}
 
@@ -352,44 +428,79 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 	}
 
 	private toggleAutoscroll(view: MarkdownView) {
-		const autoscrollControl = this.viewAutoscrollControlMap.get(view);
-
-		if (autoscrollControl?.isRunning) {
-			autoscrollControl.stop();
-		} else {
-			this.startAutoscroll(view);
+		const playbackControl = this.getPlaybackControl(view);
+		if (!playbackControl) {
+			return;
 		}
 
-		this.updateAutoscrollButton(view);
-
+		if (playbackControl.isRunning) {
+			playbackControl.stopScroll();
+		} else {
+			playbackControl.startScroll();
+		}
 	}
 
-	private updateAutoscrollButton(view: MarkdownView | MarkdownFileInfo) {
-		// @ts-expect-error, not typed
-		const editorView = view.editor.cm as EditorView;
-		const plugin = editorView.plugin(this.editorPlugin);
-		if (plugin && view instanceof MarkdownView) {
-			const existingEl: HTMLElement | null = view.containerEl.querySelector(".chord-sheet-autoscroll-action");
+	private async toggleMetronome(view: MarkdownView) {
+		const playbackControl = this.getPlaybackControl(view);
+		if (!playbackControl) {
+			return;
+		}
 
-			const shouldShowButton = this.settings.showAutoscrollButton === "always"
-				|| (
-					plugin.hasChordBlocks() && this.settings.showAutoscrollButton === "chord-blocks"
-				);
+		if (playbackControl.isMetronomeRunning) {
+			playbackControl.stopMetronome();
+		} else {
+			await playbackControl.startMetronome();
+		}
+	}
 
-			if (shouldShowButton) {
-				const autoscrollControl = this.viewAutoscrollControlMap.get(view);
-				const icon = autoscrollControl?.isRunning ? "pause-circle" : "play-circle";
-				if (!existingEl || icon !== existingEl.dataset.icon) {
-					existingEl?.remove();
-					const viewEl = view.addAction(icon, "Toggle autoscroll", () => {
-						this.toggleAutoscroll(view);
-					});
-					viewEl.addClass("chord-sheet-autoscroll-action");
-					viewEl.dataset.icon = icon;
-				}
-			} else if (existingEl) {
-				existingEl.remove();
-			}
+	private updatePlaybackButtons(view: MarkdownView | MarkdownFileInfo) {
+		if (!(view instanceof MarkdownView)) {
+			return;
+		}
+		const editorView = view.editor?.cm as EditorView | undefined;
+		const plugin = editorView?.plugin(this.editorPlugin);
+		if (!plugin) {
+			return;
+		}
+
+		const playbackControl = this.viewPlaybackControlMap.get(view);
+		const hasChordBlocks = plugin.hasChordBlocks();
+
+		this.updateActionButton(
+			view, ".chord-sheet-autoscroll-action", this.settings.showAutoscrollButton, hasChordBlocks,
+			playbackControl?.isRunning ? "pause-circle" : "play-circle", "Toggle autoscroll",
+			() => this.toggleAutoscroll(view)
+		);
+
+		this.updateActionButton(
+			view, ".chord-sheet-metronome-action", this.settings.showMetronomeButton, hasChordBlocks,
+			playbackControl?.isMetronomeRunning ? "volume-2" : "volume-x", "Toggle metronome",
+			() => void this.toggleMetronome(view)
+		);
+	}
+
+	private updateActionButton(
+		view: MarkdownView,
+		cls: string,
+		visibility: ShowAutoscrollButtonSetting,
+		hasChordBlocks: boolean,
+		icon: string,
+		tooltip: string,
+		onClick: () => void
+	) {
+		const existingEl: HTMLElement | null = view.containerEl.querySelector(cls);
+		const shouldShowButton = visibility === "always" || (hasChordBlocks && visibility === "chord-blocks");
+
+		if (!shouldShowButton) {
+			existingEl?.remove();
+			return;
+		}
+
+		if (!existingEl || icon !== existingEl.dataset.icon) {
+			existingEl?.remove();
+			const viewEl = view.addAction(icon, tooltip, onClick);
+			viewEl.addClass(cls.substring(1));
+			viewEl.dataset.icon = icon;
 		}
 	}
 
@@ -404,43 +515,61 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			: null;
 	}
 
-	private startAutoscroll(view: MarkdownView) {
+	/** Reads the note's metronome properties, or null when it has no tempo set. */
+	private getSongMetaFromFrontmatter(file: TFile | null): SongMeta | null {
+		if (!file) {
+			return null;
+		}
+		return parseSongMeta(this.app.metadataCache.getFileCache(file)?.frontmatter, {
+			tempo: this.settings.defaultTempo,
+			timeSignature: this.settings.defaultTimeSignature,
+			emphasis: this.settings.defaultEmphasis
+		});
+	}
+
+	/** Returns the view's playback control, creating it on first use. */
+	private getPlaybackControl(view: MarkdownView): PlaybackControl | null {
 		const activeFile = view.file;
 		if (!activeFile) {
-			return;
+			return null;
 		}
 
 		const frontmatterSpeed = this.getAutoscrollSpeedFromFrontmatter(activeFile);
+		const songMeta = this.getSongMetaFromFrontmatter(activeFile);
 
-		let autoscrollControl = this.viewAutoscrollControlMap.get(view);
-		if (autoscrollControl) {
-			if (frontmatterSpeed && frontmatterSpeed != autoscrollControl.speed) {
-				autoscrollControl.speed = frontmatterSpeed;
+		let playbackControl = this.viewPlaybackControlMap.get(view);
+		if (playbackControl) {
+			if (frontmatterSpeed && frontmatterSpeed != playbackControl.speed) {
+				playbackControl.speed = frontmatterSpeed;
 			}
-		} else {
-			const speed = frontmatterSpeed ?? this.settings.autoscrollDefaultSpeed;
-
-			autoscrollControl = new AutoscrollControl(view, speed);
-			this.registerEvent(autoscrollControl.events.on(SPEED_CHANGED_EVENT, (newSpeed: number) => {
-				// Update the speed saved in frontmatter if needed
-
-				const file = view.file;
-				if (!file) {
-					return;
-				}
-
-				const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-				const isSpeedInFrontmatter = frontmatter && AUTOSCROLL_SPEED_PROPERTY in frontmatter;
-
-				if (this.settings.alwaysSaveAutoscrollSpeedToFrontmatter || isSpeedInFrontmatter) {
-					this.saveAutoscrollSpeed(file, newSpeed);
-				}
-			}));
-
-			this.viewAutoscrollControlMap.set(view, autoscrollControl);
+			playbackControl.setSongMeta(songMeta);
+			return playbackControl;
 		}
 
-		autoscrollControl.start();
+		const speed = frontmatterSpeed ?? this.settings.autoscrollDefaultSpeed;
+
+		playbackControl = new PlaybackControl(view, speed, songMeta, this.settings);
+		this.registerEvent(playbackControl.events.on(SPEED_CHANGED_EVENT, (newSpeed: number) => {
+			// Update the speed saved in frontmatter if needed
+
+			const file = view.file;
+			if (!file) {
+				return;
+			}
+
+			const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+			const isSpeedInFrontmatter = frontmatter && AUTOSCROLL_SPEED_PROPERTY in frontmatter;
+
+			if (this.settings.alwaysSaveAutoscrollSpeedToFrontmatter || isSpeedInFrontmatter) {
+				this.saveAutoscrollSpeed(file, newSpeed);
+			}
+		}));
+		this.registerEvent(playbackControl.events.on(PLAYBACK_CHANGED_EVENT, () =>
+			this.updatePlaybackButtons(view)
+		));
+
+		this.viewPlaybackControlMap.set(view, playbackControl);
+		return playbackControl;
 	}
 
 	private saveAutoscrollSpeed(file: TFile, newSpeed: number) {
@@ -451,13 +580,57 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		}).then();
 	}
 
-	stopAllAutoscrolls() {
+	stopAllPlayback() {
 		this.app.workspace.iterateAllLeaves(leaf => {
 			if (leaf.view.getViewType() === "markdown") {
-				const autoscrollControl = this.viewAutoscrollControlMap.get(leaf.view);
-				autoscrollControl?.stop();
+				this.viewPlaybackControlMap.get(leaf.view)?.stop();
 			}
 		});
+	}
+
+	/** Sets the note's tempo from the average interval between successive invocations of the command. */
+	private tapTempo(file: TFile) {
+		const now = performance.now();
+		// Restart the measurement when the taps are too far apart to belong to the same tempo.
+		if (this.tapTimes.length > 0 && now - this.tapTimes[this.tapTimes.length - 1] > 2000) {
+			this.tapTimes = [];
+		}
+		this.tapTimes.push(now);
+		this.tapTimes = this.tapTimes.slice(-8);
+
+		if (this.tapTimes.length < 2) {
+			new Notice("Tap tempo: keep tapping…");
+			return;
+		}
+
+		const averageInterval =
+			(this.tapTimes[this.tapTimes.length - 1] - this.tapTimes[0]) / (this.tapTimes.length - 1);
+		const bpm = Math.round(60000 / averageInterval);
+		this.saveTempo(file, bpm);
+		new Notice(`Tempo: ${bpm} BPM`);
+	}
+
+	private adjustTempoCommand(delta: number, checking: boolean): boolean {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const songMeta = view?.file ? this.getSongMetaFromFrontmatter(view.file) : null;
+		if (!view?.file || !songMeta) {
+			return false;
+		}
+
+		if (!checking) {
+			this.saveTempo(view.file, songMeta.bpm + delta);
+		}
+
+		return true;
+	}
+
+	private saveTempo(file: TFile, bpm: number) {
+		const clamped = Math.min(Math.max(Math.round(bpm), MIN_TEMPO), MAX_TEMPO);
+		this.app.fileManager.processFrontMatter(file, frontmatter => {
+			frontmatter[TEMPO_PROPERTY] = this.getMetadataType(TEMPO_PROPERTY) === "number"
+				? clamped
+				: clamped.toString();
+		}).then();
 	}
 
 	applyNewSettingsToEditors() {
@@ -466,6 +639,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 				const markdownView = leaf.view as MarkdownView;
 				const editorView = markdownView.editor?.cm as EditorView | null;
 				markdownView.previewMode?.rerender(true);
+				this.viewPlaybackControlMap.get(markdownView)?.updateSettings(this.settings);
 				const chordPlugin = editorView?.plugin(this.editorPlugin);
 				chordPlugin?.updateSettings(this.settings);
 			}
@@ -480,7 +654,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 
 	onunload() {
-		this.stopAllAutoscrolls();
+		this.stopAllPlayback();
 	}
 
 	async loadSettings() {

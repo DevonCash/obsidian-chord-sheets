@@ -28,6 +28,15 @@ export interface ChordSheetsSettings {
 	highlightRhythmMarkers: boolean;
 	displayInlineChordsOverLyrics: boolean;
 	showLineMarkersInReadingMode: boolean;
+
+	// Metronome and tempo-aware autoscroll
+	metronomeVolume: number;
+	showMetronomeButton: ShowAutoscrollButtonSetting;
+	defaultTempo: number;
+	defaultTimeSignature: string;
+	defaultEmphasis: string;
+	tempoAwareAutoscroll: boolean;
+	scrollAnchorFraction: number;
 }
 
 export const DEFAULT_SETTINGS: ChordSheetsSettings = {
@@ -49,5 +58,13 @@ export const DEFAULT_SETTINGS: ChordSheetsSettings = {
 	highlightSectionHeaders: true,
 	highlightRhythmMarkers: true,
 	displayInlineChordsOverLyrics: false,
-	showLineMarkersInReadingMode: false
+	showLineMarkersInReadingMode: false,
+
+	metronomeVolume: 0.5,
+	showMetronomeButton: "chord-blocks",
+	defaultTempo: 100,
+	defaultTimeSignature: "4/4",
+	defaultEmphasis: "X",
+	tempoAwareAutoscroll: true,
+	scrollAnchorFraction: 0.3
 };

@@ -5,6 +5,19 @@ id: chord-sheets
 settings:
 	## CHORDS
     -
+        id: chord-sheet-transport
+        title: Playback controls
+        type: heading
+        level: 3
+    -
+        id: chord-sheet-transport-active-color
+        title: Active playback button color
+        description: Color of the autoscroll and metronome buttons while they are running. Defaults to the current theme's accent color.
+        type: variable-themed-color
+        format: hex
+        default-light: '#'
+        default-dark: '#'
+    -
         id: chords
         title: Chords
         type: heading
@@ -844,15 +857,16 @@ svg.enharmonic-toggle {
 	stroke-width: 1.5px;
 }
 
-/* Autoscroll controls */
+/* Playback (autoscroll + metronome) controls */
 .chord-sheet-autoscroll-control {
 	display: flex;
 	justify-content: flex-end;
 	align-items: center;
+	gap: 0.4rem;
 	padding-right: var(--size-4-5);
 	border-bottom: 1px solid var(--divider-color);
     border-top: 1px solid var(--divider-color);
-	height: 1.6rem;
+	min-height: 1.6rem;
 
 	color: var(--text-muted);
 	font-size: var(--file-header-font-size);
@@ -860,6 +874,61 @@ svg.enharmonic-toggle {
 	.slider {
 		margin-inline-start: 0.4rem;
 	}
+}
+
+.chord-sheet-transport-label {
+	white-space: nowrap;
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0 var(--size-2-2);
+	height: 1.4rem;
+	box-shadow: none;
+	background: transparent;
+	color: var(--text-muted);
+	cursor: pointer;
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-button:hover {
+	color: var(--text-normal);
+	background-color: var(--background-modifier-hover);
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-button.is-active {
+	color: var(--chord-sheet-transport-active-color, var(--text-accent));
+}
+
+.chord-sheet-autoscroll-control button.chord-sheet-transport-button .svg-icon {
+	width: var(--icon-s);
+	height: var(--icon-s);
+}
+
+.chord-sheet-autoscroll-control input.chord-sheet-transport-field {
+	height: 1.4rem;
+	padding: 0 var(--size-2-2);
+	font-size: var(--file-header-font-size);
+	text-align: center;
+}
+
+.chord-sheet-autoscroll-control input.chord-sheet-transport-tempo {
+	width: 4.5rem;
+}
+
+.chord-sheet-autoscroll-control input.chord-sheet-transport-time-signature {
+	width: 3.5rem;
+}
+
+.chord-sheet-autoscroll-control input.chord-sheet-transport-emphasis {
+	width: 8rem;
+	font-family: var(--font-monospace);
+}
+
+.chord-sheet-autoscroll-control input.chord-sheet-transport-field-invalid {
+	border-color: var(--text-error);
+	color: var(--text-error);
 }
 
 
