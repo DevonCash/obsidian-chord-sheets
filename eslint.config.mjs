@@ -38,8 +38,10 @@ export default defineConfig([
 			globals: {...globals.jest, ...globals.node}
 		},
 		rules: {
-			// Tests run under Node, so the mobile-compatibility rule does not apply to them.
-			"obsidianmd/no-nodejs-modules": "off"
+			// Tests run under Node, where the mobile-compatibility rule does not apply and there is no
+			// window to prefer over globalThis — stubbing one onto globalThis is how they get it.
+			"obsidianmd/no-nodejs-modules": "off",
+			"obsidianmd/no-global-this": "off"
 		}
 	}
 ]);
