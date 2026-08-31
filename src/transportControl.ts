@@ -44,6 +44,7 @@ export class TransportControl {
 			cls: "chord-sheet-autoscroll-control"
 		});
 		this.containerEl = containerEl;
+		this.liftClearOfStatusBar(containerEl);
 
 		this.scrollButton = containerEl.createEl("button", {
 			cls: ["chord-sheet-transport-button", "chord-sheet-transport-play"]
@@ -180,6 +181,29 @@ export class TransportControl {
 		this.view.app.fileManager.processFrontMatter(file, frontmatter => {
 			Object.assign(frontmatter, properties);
 		}).then();
+	}
+
+	/**
+	 * Obsidian's status bar floats over the bottom right of the window, above anything a view puts there,
+	 * so the transport bar is lifted to sit on top of it rather than underneath. It lives outside the
+	 * view, which is why this cannot be expressed in the stylesheet alone.
+	 *
+	 * Only the view the status bar actually reaches is lifted, so a pane in the upper half of a split
+	 * keeps its bar flush to its own bottom edge.
+	 */
+	private liftClearOfStatusBar(containerEl: HTMLElement) {
+		const statusBar = containerEl.ownerDocument.body.querySelector(".status-bar");
+		const statusRect = statusBar?.getBoundingClientRect();
+		const viewRect = this.view.contentEl.getBoundingClientRect();
+
+		const overlaps = !!statusRect
+			&& statusRect.height > 0
+			&& viewRect.bottom > statusRect.top
+			&& viewRect.right > statusRect.left;
+
+		containerEl.style.setProperty(
+			"--chord-sheet-transport-bottom", overlaps ? `${statusRect.height}px` : "0px"
+		);
 	}
 
 	setSpeed(speed: number) {

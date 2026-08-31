@@ -888,7 +888,8 @@ svg.enharmonic-toggle {
 .chord-sheet-autoscroll-control {
 	position: absolute;
 	inset-inline: 0;
-	bottom: 0;
+	/* Lifted clear of Obsidian's floating status bar; set from the view, see liftClearOfStatusBar. */
+	bottom: var(--chord-sheet-transport-bottom, 0px);
 	z-index: var(--layer-status-bar, 15);
 
 	display: flex;
