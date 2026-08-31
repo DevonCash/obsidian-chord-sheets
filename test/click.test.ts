@@ -110,7 +110,7 @@ describe("metronome scheduling", () => {
 	});
 
 	describe("after seeking", () => {
-		it("does not sound the beat it lands on", () => {
+		it("sounds the beat it lands on, with enough lead to start cleanly", () => {
 			const {context, transport, click, schedule} = setup();
 			transport.start();
 			click.start();
@@ -118,15 +118,35 @@ describe("metronome scheduling", () => {
 			schedule();
 			const before = context.played.length;
 
-			// Land exactly on beat 8, as clicking a slot does.
-            transport.seek(8);
-			click.resync();
+			// Land exactly on beat 8, as clicking a chord on a downbeat does.
+			transport.seek(8);
+			click.resync(8);
+			// The scheduler next wakes a moment later, by which time the transport has crept past beat 8.
+			context.currentTime += 0.02;
 			schedule();
 
-			// Anything scheduled is properly ahead, not crammed onto the seek instant.
-			for (const beat of context.played.slice(before)) {
-				expect(beat.startedAt).toBeGreaterThan(context.currentTime);
-			}
+			const played = context.played.slice(before);
+			expect(played).toHaveLength(1);
+			// It sounds essentially at once, but never with zero lead — that is what pops.
+			expect(played[0].startedAt).toBeGreaterThan(context.currentTime);
+			expect(played[0].startedAt).toBeLessThan(context.currentTime + 0.05);
+		});
+
+		it("sounds the landing beat as an accent when it is a downbeat", () => {
+			const {context, transport, click, schedule} = setup();
+			transport.start();
+			click.start();
+			context.currentTime = 0.5;
+			schedule();
+			const before = context.played.length;
+
+			// Beat 8 is the first beat of a bar in 4/4, so the pattern's accent falls on it.
+			transport.seek(8);
+			click.resync(8);
+			context.currentTime += 0.02;
+			schedule();
+
+			expect(context.played.slice(before)[0].frequency).toBe(1500);
 		});
 
 		it("picks up on the next beat boundary", () => {
@@ -137,10 +157,11 @@ describe("metronome scheduling", () => {
 			schedule();
 			const before = context.played.length;
 
-			// Land a quarter of the way into beat 8, at one beat per second.
+			// Land a quarter of the way into beat 8, at one beat per second. Nothing is due on that
+			// instant, so the count picks up on the next whole beat.
 			const seekedAt = context.currentTime;
 			transport.seek(8.25);
-			click.resync();
+			click.resync(8.25);
 
 			// Three quarters of that beat remain, so beat 9 is due 0.75s later — and not before.
 			const dueAt = seekedAt + 0.75;

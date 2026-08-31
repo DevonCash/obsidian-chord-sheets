@@ -96,7 +96,7 @@ export class PlaybackControl extends Component {
 	 */
 	seekToSlot(slot: SlotOccurrence) {
 		this.transport.seek(slot.startBeat);
-		this.click.resync();
+		this.click.resync(slot.startBeat);
 		this.highlighter.show(slot);
 	}
 

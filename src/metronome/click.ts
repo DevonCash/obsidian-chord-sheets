@@ -81,14 +81,15 @@ export class MetronomeClick {
 	}
 
 	/**
-	 * Picks the beat count back up from wherever the transport now is. Needed after a seek: the next beat
-	 * to schedule was chosen against the old position, and would otherwise fire a burst of catch-up
-	 * clicks or go quiet until the song caught up again.
+	 * Picks the beat count back up after a seek: the next beat to schedule was chosen against the old
+	 * position, and would otherwise fire a burst of catch-up clicks or go quiet until the song caught up.
+	 *
+	 * Landing on a beat sounds it, which is what makes clicking a chord audibly start there. Pass the
+	 * beat that was sought to rather than relying on the transport's position, which has already crept
+	 * past it by the time the scheduler next wakes — enough to round the landing beat away.
 	 */
-	resync() {
-		// The next beat boundary strictly ahead. Landing exactly on the current position would mean
-		// sounding a beat with no lead at all, which is heard as a click artifact rather than a beat.
-		this.nextBeat = Math.floor(this.transport.currentBeat()) + 1;
+	resync(fromBeat = this.transport.currentBeat()) {
+		this.nextBeat = Math.ceil(fromBeat);
 	}
 
 	stop() {
