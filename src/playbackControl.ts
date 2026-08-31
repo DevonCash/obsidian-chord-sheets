@@ -4,7 +4,8 @@ import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
 import {MetronomeClick} from "./metronome/click";
 import {Transport} from "./metronome/transport";
 import {parseSongMeta, SongMeta} from "./metronome/songMeta";
-import {buildSongTimeline} from "./metronome/songTiming";
+import {buildSongTimeline, chordAtBeat, SongTimeline} from "./metronome/songTiming";
+import {ChordHighlighter} from "./chordHighlight";
 import {TransportControl} from "./transportControl";
 
 export {AUTOSCROLL_STEPS} from "./scrollPacer";
@@ -31,7 +32,10 @@ export class PlaybackControl extends Component {
 
 	private readonly transport: Transport;
 	private readonly click: MetronomeClick;
+	private readonly highlighter: ChordHighlighter;
 	private pacer: ScrollPacer;
+	/** The song's measure timeline, or null when the note has no tempo to pace against. */
+	private timeline: SongTimeline | null = null;
 
 	readonly events = new Events();
 
@@ -44,6 +48,7 @@ export class PlaybackControl extends Component {
 		super();
 		this.transport = new Transport(this._songMeta ?? defaultSongMeta(settings));
 		this.click = new MetronomeClick(this.transport, settings.metronomeVolume);
+		this.highlighter = new ChordHighlighter(view);
 		this.pacer = this.createPacer();
 		view.addChild(this);
 	}
@@ -93,17 +98,24 @@ export class PlaybackControl extends Component {
 		this.settings = settings;
 		this.click.setVolume(settings.metronomeVolume);
 		this.pacer = this.createPacer();
+		if (!settings.highlightCurrentChord) {
+			this.highlighter.clear();
+		}
 	}
 
 	/** Called when the document changed, so cached line positions (and measures) are recomputed. */
 	invalidateGeometry() {
-		if (this.scrolling) {
+		if (this.isPlaying) {
 			// Editing mid-playback can change the measures themselves, not just the layout.
 			this.pacer = this.createPacer();
 		} else {
-			// Nothing is running; startScroll() builds a fresh pacer anyway.
+			// Nothing is running; starting again builds a fresh pacer anyway.
 			this.pacer.invalidate();
 		}
+	}
+
+	private get isPlaying(): boolean {
+		return this.scrolling || this.click.isRunning;
 	}
 
 	startScroll() {
@@ -126,7 +138,7 @@ export class PlaybackControl extends Component {
 			return;
 		}
 		this.scrolling = false;
-		this.stopFrames();
+		this.stopFramesIfIdle();
 		this.pauseTransportIfIdle();
 		this.updateControlVisibility();
 		this.events.trigger(PLAYBACK_CHANGED_EVENT);
@@ -139,9 +151,12 @@ export class PlaybackControl extends Component {
 		// Must happen in response to a user gesture, otherwise the audio context stays suspended.
 		const audioContext = await this.click.prepareAudio();
 		this.transport.setAudioContext(audioContext);
+		// Rebuild so the chord highlight follows edits made since the last run.
+		this.pacer = this.createPacer();
 		this.transport.start();
 		this.click.start();
 		this.showControl();
+		this.startFrames();
 		this.events.trigger(PLAYBACK_CHANGED_EVENT);
 	}
 
@@ -150,6 +165,7 @@ export class PlaybackControl extends Component {
 			return;
 		}
 		this.click.stop();
+		this.stopFramesIfIdle();
 		this.pauseTransportIfIdle();
 		this.updateControlVisibility();
 		this.events.trigger(PLAYBACK_CHANGED_EVENT);
@@ -157,10 +173,10 @@ export class PlaybackControl extends Component {
 
 	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */
 	stop() {
-		const wasPlaying = this.scrolling || this.click.isRunning;
+		const wasPlaying = this.isPlaying;
 		this.scrolling = false;
-		this.stopFrames();
 		this.click.stop();
+		this.stopFrames();
 		this.transport.pause();
 		this.transport.reset();
 		this.hideControl();
@@ -185,24 +201,33 @@ export class PlaybackControl extends Component {
 	}
 
 	private pauseTransportIfIdle() {
-		if (!this.scrolling && !this.click.isRunning) {
+		if (!this.isPlaying) {
 			this.transport.pause();
 		}
 	}
 
+	private stopFramesIfIdle() {
+		if (!this.isPlaying) {
+			this.stopFrames();
+		}
+	}
+
 	private createPacer(): ScrollPacer {
-		if (this._songMeta && this.settings.tempoAwareAutoscroll) {
-			const timeline = buildSongTimeline(
+		// The timeline drives the chord highlight as well as the scroll, so it is built whenever the note
+		// has a tempo — even if tempo-aware scrolling itself is switched off.
+		this.timeline = this._songMeta
+			? buildSongTimeline(
 				this.view.data,
 				this.settings.blockLanguageSpecifier,
 				this.settings,
 				this._songMeta.beatsPerBar
+			)
+			: null;
+
+		if (this.timeline && this.timeline.entries.length > 0 && this.settings.tempoAwareAutoscroll) {
+			return new TempoScrollPacer(
+				this.view, this.transport, this.timeline, this.settings.scrollAnchorFraction
 			);
-			if (timeline.entries.length > 0) {
-				return new TempoScrollPacer(
-					this.view, this.transport, timeline, this.settings.scrollAnchorFraction
-				);
-			}
 		}
 		return new ConstantSpeedPacer(this._speed);
 	}
@@ -214,6 +239,9 @@ export class PlaybackControl extends Component {
 	}
 
 	private startFrames() {
+		if (this.frameId !== null) {
+			return;
+		}
 		this.lastFrameTime = performance.now();
 
 		const step = () => {
@@ -223,7 +251,9 @@ export class PlaybackControl extends Component {
 			const dtMs = now - this.lastFrameTime;
 			this.lastFrameTime = now;
 
-			const scrollElem = this.getScrollElement();
+			this.updateChordHighlight();
+
+			const scrollElem = this.scrolling ? this.getScrollElement() : null;
 			if (!scrollElem) {
 				return;
 			}
@@ -254,6 +284,14 @@ export class PlaybackControl extends Component {
 			this.frameId = null;
 		}
 		this.lastAppliedScrollTop = null;
+		this.highlighter.clear();
+	}
+
+	private updateChordHighlight() {
+		if (!this.settings.highlightCurrentChord || !this.timeline) {
+			return;
+		}
+		this.highlighter.show(chordAtBeat(this.timeline, this.transport.currentBeat()));
 	}
 
 	private showControl() {

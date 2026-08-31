@@ -7,6 +7,7 @@ import {MarkdownView} from "obsidian";
 import {EditorView} from "@codemirror/view";
 import {entryIndexAtBeat, SongTimeline} from "./metronome/songTiming";
 import {Transport} from "./metronome/transport";
+import {renderedBlockLines} from "./renderedChordBlocks";
 
 export const AUTOSCROLL_STEPS = 20;
 
@@ -161,26 +162,25 @@ export class TempoScrollPacer implements ScrollPacer {
 	}
 
 	private readingModeOffsets(scrollElem: HTMLElement): number[] | null {
-		// The reading mode post processor renders one .chord-sheet-chord-line per line of each block, in
-		// document order, so timeline entries index into them by (blockIndex, lineInBlock).
-		const blocks = Array.from(
-			this.view.previewMode.containerEl.querySelectorAll(".chord-sheet-chord-block-preview")
-		);
-		if (blocks.length === 0) {
-			return null;
-		}
-
+		// The reading mode post processor renders one .chord-sheet-chord-line per line of each block, so
+		// a timeline entry is located by its block and its line within that block.
 		const scrollRect = scrollElem.getBoundingClientRect();
 		const offsets: number[] = [];
+		let found = false;
+
 		for (const entry of this.timeline.entries) {
-			const lineEl = blocks[entry.blockIndex]?.children[entry.lineInBlock];
+			const lineEl = renderedBlockLines(this.view, entry.blockStartLine)?.[entry.lineInBlock];
 			if (!lineEl) {
-				// Block or line not rendered (yet) — fall back to the previous known position.
+				// Not rendered (yet) — hold at the previous known position rather than jumping to 0.
 				offsets.push(offsets.length > 0 ? offsets[offsets.length - 1] : 0);
 				continue;
 			}
+			found = true;
 			offsets.push(lineEl.getBoundingClientRect().top - scrollRect.top + scrollElem.scrollTop);
 		}
-		return offsets;
+
+		// Nothing rendered yet: report no geometry so the caller retries next frame instead of caching
+		// a page of zeroes.
+		return found ? offsets : null;
 	}
 }

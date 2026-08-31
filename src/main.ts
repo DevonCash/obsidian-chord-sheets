@@ -58,6 +58,14 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 				if (langClass) {
 					const instrumentString = langClass.split("-")[1];
 					const instrument = instrumentString as Instrument ?? this.settings.defaultInstrument;
+
+					// Record which block this is, so playback can find it by document position. Reading
+					// mode unloads sections that are far off-screen, so counting rendered blocks in
+					// document order would pick the wrong one on a long note.
+					const lineStart = context.getSectionInfo(codeblock.parentElement!)?.lineStart;
+					if (lineStart !== undefined) {
+						codeblock.parentElement!.dataset.chordSheetBlockLine = String(lineStart);
+					}
 					context.addChild(new ChordBlockPostProcessorView(
 						codeblock.parentElement!,
 						instrument,

@@ -311,6 +311,18 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
+			.setName('Highlight the current chord')
+			.setDesc('While the metronome or the autoscroll is running, highlight the chord being played. Chords sharing a measure divide it equally, and a chord stays highlighted until the next one starts.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.highlightCurrentChord)
+				.onChange(async value => {
+					this.plugin.settings.highlightCurrentChord = value;
+					await this.plugin.saveSettings();
+					this.plugin.applyNewSettingsToEditors();
+				})
+			);
+
+		new Setting(containerEl)
 			.setName('Reading position')
 			.setDesc('How far down the screen the chord line currently being played is held, as a fraction of the window height.')
 			.addSlider(slider => slider

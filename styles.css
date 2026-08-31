@@ -5,6 +5,19 @@ id: chord-sheets
 settings:
 	## CHORDS
     -
+        id: chord-sheet-playing-chord
+        title: Current chord
+        type: heading
+        level: 3
+    -
+        id: chord-sheet-playing-chord-background-color
+        title: Playing chord highlight color
+        description: Background color of the chord currently being played. Defaults to the current theme's selection color.
+        type: variable-themed-color
+        format: hex
+        default-light: '#'
+        default-dark: '#'
+    -
         id: chord-sheet-transport
         title: Playback controls
         type: heading
@@ -855,6 +868,14 @@ svg.enharmonic-toggle {
 	stroke-linejoin: round;
 	stroke-linecap: round;
 	stroke-width: 1.5px;
+}
+
+/* Chord currently being played */
+.chord-sheet-chord-playing,
+.chord-sheet-chord.chord-sheet-chord-playing .chord-sheet-chord-name {
+	background-color: var(--chord-sheet-playing-chord-background-color, var(--text-selection));
+	border-radius: var(--radius-s);
+	box-shadow: 0 0 0 2px var(--chord-sheet-playing-chord-background-color, var(--text-selection));
 }
 
 /* Playback (autoscroll + metronome) controls */

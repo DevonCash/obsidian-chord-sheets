@@ -1,4 +1,10 @@
-import {buildSongTimeline, countMeasures, entryIndexAtBeat, LineMarkerSettings} from "../src/metronome/songTiming";
+import {
+	buildSongTimeline,
+	chordAtBeat,
+	countMeasures,
+	entryIndexAtBeat,
+	LineMarkerSettings
+} from "../src/metronome/songTiming";
 import {tokenizeLine} from "../src/sheet-parsing/tokenizeLine";
 import {DEFAULT_CHORD_LINE_MARKER, DEFAULT_TEXT_LINE_MARKER} from "../src/chordSheetsSettings";
 
@@ -154,5 +160,95 @@ describe("entryIndexAtBeat", () => {
 		[999, 2],
 	])("resolves beat %p to entry %i", (beat, expected) => {
 		expect(entryIndexAtBeat(timeline, beat)).toBe(expected);
+	});
+});
+
+describe("chord occurrences", () => {
+	function chordBeats(line: string, beatsPerBar = 4) {
+		const doc = block(line);
+		const timeline = buildSongTimeline(doc, "chords", markers, beatsPerBar);
+		// Slice the chord symbol back out of the document to check the offsets point at the right text.
+		return timeline.chords.map(c => [doc.slice(c.from, c.to), c.startBeat] as const);
+	}
+
+	it("splits a measure equally between the chords sharing it", () => {
+		expect(chordBeats("| Em Am | C |")).toEqual([["Em", 0], ["Am", 2], ["C", 4]]);
+	});
+
+	it("gives each chord a whole measure when the line has no bar lines", () => {
+		expect(chordBeats("Em Am C")).toEqual([["Em", 0], ["Am", 4], ["C", 8]]);
+	});
+
+	it("divides a measure between four chords", () => {
+		expect(chordBeats("| Em Am C G |")).toEqual([["Em", 0], ["Am", 1], ["C", 2], ["G", 3]]);
+	});
+
+	it("keeps later chords on the beat when a bar holds only repeat markers", () => {
+		// The repeat bars belong to Em, which stays current until Am starts on the fourth bar.
+		expect(chordBeats("| Em | % | % | Am |")).toEqual([["Em", 0], ["Am", 12]]);
+	});
+
+	it("scales with the meter", () => {
+		expect(chordBeats("| Em Am | C |", 8)).toEqual([["Em", 0], ["Am", 4], ["C", 8]]);
+		expect(chordBeats("| Em Am | C |", 12)).toEqual([["Em", 0], ["Am", 6], ["C", 12]]);
+	});
+
+	it("accumulates across lines and blocks", () => {
+		const doc = [block("| Em | Am |", "lyrics here", "| C |"), block("| G |")].join("\n");
+		const timeline = buildSongTimeline(doc, "chords", markers, 4);
+		expect(timeline.chords.map(c => [doc.slice(c.from, c.to), c.startBeat])).toEqual([
+			["Em", 0], ["Am", 4], ["C", 8], ["G", 12]
+		]);
+	});
+
+	it("records where each chord is rendered, for reading mode", () => {
+		const doc = [block("| Em | Am |", "lyrics here", "| C |"), block("| G |")].join("\n");
+		const timeline = buildSongTimeline(doc, "chords", markers, 4);
+		expect(timeline.chords.map(c => [c.blockIndex, c.lineInBlock, c.chordInLine])).toEqual([
+			[0, 0, 0], [0, 0, 1], [0, 2, 0], [1, 0, 0]
+		]);
+	});
+
+	it("records the fence line of each chord's block, so reading mode can locate it", () => {
+		const doc = ["# Heading", "", block("| Em |"), "prose", block("| Am |")].join("\n");
+		const timeline = buildSongTimeline(doc, "chords", markers, 4);
+		// Fences are on document lines 2 and 6.
+		expect(timeline.chords.map(c => c.blockStartLine)).toEqual([2, 6]);
+		expect(timeline.entries.map(e => e.blockStartLine)).toEqual([2, 6]);
+		expect(doc.split("\n")[2]).toBe("```chords");
+		expect(doc.split("\n")[6]).toBe("```chords");
+	});
+
+	it("has no chords for a line the tokenizer cannot separate", () => {
+		// `|Em|Am|` folds into a single word token, so there is nothing to highlight — but the line is
+		// still two measures long, so the timing is unaffected.
+		const timeline = buildSongTimeline(block("|Em|Am|"), "chords", markers, 4);
+		expect(timeline.chords).toHaveLength(0);
+		expect(timeline.totalBeats).toBe(8);
+	});
+});
+
+describe("chordAtBeat", () => {
+	const timeline = buildSongTimeline(block("| Em Am | C |", "| G |"), "chords", markers, 4);
+	const at = (beat: number) => {
+		const chord = chordAtBeat(timeline, beat);
+		return chord && [chord.startBeat, chord.chordInLine, chord.lineInBlock];
+	};
+
+	it("returns nothing before the song starts", () => {
+		expect(at(-1)).toBeNull();
+	});
+
+	it("holds a chord until the next one starts", () => {
+		expect(at(0)).toEqual([0, 0, 0]);
+		expect(at(1.9)).toEqual([0, 0, 0]);
+		expect(at(2)).toEqual([2, 1, 0]);
+		expect(at(3.9)).toEqual([2, 1, 0]);
+		expect(at(4)).toEqual([4, 2, 0]);
+	});
+
+	it("carries on into the next line", () => {
+		expect(at(8)).toEqual([8, 0, 1]);
+		expect(at(999)).toEqual([8, 0, 1]);
 	});
 });

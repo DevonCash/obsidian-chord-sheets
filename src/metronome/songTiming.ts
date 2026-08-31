@@ -12,13 +12,15 @@
  * parsed and exists only in edit mode, while this timeline is needed in reading mode too.
  */
 
-import {isChordToken, TokenizedLine} from "../sheet-parsing/tokens";
+import {ChordToken, isChordToken, isRhythmToken, Token, TokenizedLine} from "../sheet-parsing/tokens";
 import {tokenizeLine} from "../sheet-parsing/tokenizeLine";
 import escapeStringRegexp from "escape-string-regexp";
 
 export interface TimelineEntry {
 	/** Index of the chord block this line belongs to, counting from 0 in document order. */
 	blockIndex: number;
+	/** 0-based document line of the block's opening fence, used to identify the block once rendered. */
+	blockStartLine: number;
 	/** Index of this line within its chord block's content, counting from 0 after the opening fence. */
 	lineInBlock: number;
 	/** 0-based line number within the whole document. */
@@ -28,8 +30,25 @@ export interface TimelineEntry {
 	startBeat: number;
 }
 
+/**
+ * A single chord as it is played. A chord stays current until the next one starts, which is what makes a
+ * bar of repeat markers (`| Em | % | % |`) hold the preceding chord.
+ */
+export interface ChordOccurrence {
+	startBeat: number;
+	/** Absolute offsets of the chord symbol in the document, for highlighting in the editor. */
+	from: number;
+	to: number;
+	/** Position of the chord in the rendered output, for highlighting in reading mode. */
+	blockIndex: number;
+	blockStartLine: number;
+	lineInBlock: number;
+	chordInLine: number;
+}
+
 export interface SongTimeline {
 	entries: TimelineEntry[];
+	chords: ChordOccurrence[];
 	totalBeats: number;
 	beatsPerBar: number;
 }
@@ -61,6 +80,72 @@ export function countMeasures(tokenizedLine: TokenizedLine): number {
 	return tokenizedLine.tokens.filter(token => isChordToken(token)).length;
 }
 
+function isBarLine(token: Token): boolean {
+	return isRhythmToken(token) && token.value.includes("|");
+}
+
+/**
+ * Groups a chord line's chords by the measure they fall in. Measures without any chord (a bar holding
+ * only a repeat marker, say) are kept as empty groups so later chords land on the right beat.
+ */
+function chordsByMeasure(tokenizedLine: TokenizedLine): ChordToken[][] {
+	const measures: ChordToken[][] = [];
+	let current: ChordToken[] = [];
+	let hasContent = false;
+
+	const flush = () => {
+		if (hasContent) {
+			measures.push(current);
+		}
+		current = [];
+		hasContent = false;
+	};
+
+	for (const token of tokenizedLine.tokens) {
+		if (isBarLine(token)) {
+			flush();
+		} else if (isChordToken(token)) {
+			current.push(token);
+			hasContent = true;
+		} else if (isRhythmToken(token)) {
+			hasContent = true;
+		}
+	}
+	flush();
+
+	return measures;
+}
+
+/**
+ * Assigns a start beat to every chord on a line. Chords sharing a measure divide it equally, so
+ * `| Em Am | C |` in 4/4 puts Em on beat 0, Am on beat 2 and C on beat 4.
+ */
+function chordStartBeats(
+	tokenizedLine: TokenizedLine,
+	lineStartBeat: number,
+	beatsPerBar: number
+): {token: ChordToken, startBeat: number}[] {
+	const chords: {token: ChordToken, startBeat: number}[] = [];
+
+	if (tokenizedLine.tokens.some(token => isBarLine(token))) {
+		chordsByMeasure(tokenizedLine).forEach((measureChords, measureIndex) => {
+			measureChords.forEach((token, i) => {
+				const offset = (measureIndex + i / measureChords.length) * beatsPerBar;
+				chords.push({token, startBeat: lineStartBeat + offset});
+			});
+		});
+		return chords;
+	}
+
+	// No bar lines: one measure per chord.
+	for (const token of tokenizedLine.tokens) {
+		if (isChordToken(token)) {
+			chords.push({token, startBeat: lineStartBeat + chords.length * beatsPerBar});
+		}
+	}
+	return chords;
+}
+
 function chordBlockFencePattern(languageSpecifier: string): RegExp {
 	// Matches the opening fence of a chord block, with or without an instrument suffix
 	// (```chords, ```chords-ukulele, ~~~chords).
@@ -80,20 +165,26 @@ export function buildSongTimeline(
 	const closingFence = /^\s*(?:~{3,}|`{3,})\s*$/;
 
 	const entries: TimelineEntry[] = [];
+	const chords: ChordOccurrence[] = [];
 	const lines = docText.split("\n");
 
 	let blockIndex = -1;
 	let lineInBlock = 0;
 	let inBlock = false;
+	let blockStartLine = 0;
 	let startBeat = 0;
+	let lineStartOffset = 0;
 
 	for (let docLine = 0; docLine < lines.length; docLine++) {
 		const line = lines[docLine];
+		const offset = lineStartOffset;
+		lineStartOffset += line.length + 1;
 
 		if (!inBlock) {
 			if (openingFence.test(line)) {
 				inBlock = true;
 				blockIndex++;
+				blockStartLine = docLine;
 				lineInBlock = 0;
 			}
 			continue;
@@ -108,7 +199,21 @@ export function buildSongTimeline(
 		if (tokenizedLine.isChordLine) {
 			const measures = countMeasures(tokenizedLine);
 			if (measures > 0) {
-				entries.push({blockIndex, lineInBlock, docLine, measures, startBeat});
+				entries.push({blockIndex, blockStartLine, lineInBlock, docLine, measures, startBeat});
+
+				chordStartBeats(tokenizedLine, startBeat, beatsPerBar).forEach(({token, startBeat: beat}, i) => {
+					// tokenizeLine was given a zero line index, so the token ranges are line-relative.
+					chords.push({
+						startBeat: beat,
+						from: offset + token.range[0],
+						to: offset + token.range[1],
+						blockIndex,
+						blockStartLine,
+						lineInBlock,
+						chordInLine: i
+					});
+				});
+
 				startBeat += measures * beatsPerBar;
 			}
 		}
@@ -116,22 +221,20 @@ export function buildSongTimeline(
 		lineInBlock++;
 	}
 
-	return {entries, totalBeats: startBeat, beatsPerBar};
+	return {entries, chords, totalBeats: startBeat, beatsPerBar};
 }
 
 /**
- * Finds the index of the last entry that has started at `beat`, or -1 if the song has not reached the
- * first chord line yet.
+ * Finds the index of the last item that has started at `beat`, or -1 if none has started yet.
  */
-export function entryIndexAtBeat(timeline: SongTimeline, beat: number): number {
-	const {entries} = timeline;
+function indexAtBeat(items: {startBeat: number}[], beat: number): number {
 	let low = 0;
-	let high = entries.length - 1;
+	let high = items.length - 1;
 	let result = -1;
 
 	while (low <= high) {
 		const mid = (low + high) >> 1;
-		if (entries[mid].startBeat <= beat) {
+		if (items[mid].startBeat <= beat) {
 			result = mid;
 			low = mid + 1;
 		} else {
@@ -140,4 +243,17 @@ export function entryIndexAtBeat(timeline: SongTimeline, beat: number): number {
 	}
 
 	return result;
+}
+
+/** Index of the chord line being played at `beat`, or -1 before the song reaches the first one. */
+export function entryIndexAtBeat(timeline: SongTimeline, beat: number): number {
+	return indexAtBeat(timeline.entries, beat);
+}
+
+/**
+ * The chord being played at `beat`, or null before the first one. A chord stays current until the next
+ * one starts.
+ */
+export function chordAtBeat(timeline: SongTimeline, beat: number): ChordOccurrence | null {
+	return timeline.chords[indexAtBeat(timeline.chords, beat)] ?? null;
 }

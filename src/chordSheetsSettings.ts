@@ -36,6 +36,7 @@ export interface ChordSheetsSettings {
 	defaultTimeSignature: string;
 	defaultEmphasis: string;
 	tempoAwareAutoscroll: boolean;
+	highlightCurrentChord: boolean;
 	scrollAnchorFraction: number;
 }
 
@@ -66,5 +67,6 @@ export const DEFAULT_SETTINGS: ChordSheetsSettings = {
 	defaultTimeSignature: "4/4",
 	defaultEmphasis: "X",
 	tempoAwareAutoscroll: true,
+	highlightCurrentChord: true,
 	scrollAnchorFraction: 0.3
 };
