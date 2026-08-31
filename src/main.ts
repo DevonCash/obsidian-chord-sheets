@@ -30,6 +30,7 @@ import {addCustomChordTypes} from "./customChordTypes";
 import {enharmonicToggle, transpose} from "./chordProcessing";
 import {Instrument} from "./instruments/types";
 import {instruments} from "./instruments/instruments";
+import {TapTempo} from "./metronome/tapTempo";
 import {SLOT_SELECTOR} from "./renderedChordBlocks";
 
 
@@ -41,7 +42,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 	editorExtension: Extension[] | null;
 
 	viewPlaybackControlMap = new WeakMap<View, PlaybackControl>();
-	private tapTimes: number[] = [];
+	private readonly tapTempo = new TapTempo();
 
 	async onload() {
 		addCustomChordTypes();
@@ -304,7 +305,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 				}
 
 				if (!checking) {
-					this.tapTempo(view.file);
+					this.tapTempoCommand(view.file);
 				}
 
 				return true;
@@ -643,24 +644,13 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		});
 	}
 
-	/** Sets the note's tempo from the average interval between successive invocations of the command. */
-	private tapTempo(file: TFile) {
-		const now = performance.now();
-		// Restart the measurement when the taps are too far apart to belong to the same tempo.
-		if (this.tapTimes.length > 0 && now - this.tapTimes[this.tapTimes.length - 1] > 2000) {
-			this.tapTimes = [];
-		}
-		this.tapTimes.push(now);
-		this.tapTimes = this.tapTimes.slice(-8);
-
-		if (this.tapTimes.length < 2) {
+	/** Sets the note's tempo from the interval between successive invocations of the command. */
+	private tapTempoCommand(file: TFile) {
+		const bpm = this.tapTempo.tap(performance.now());
+		if (bpm === null) {
 			new Notice("Tap tempo: keep tapping…");
 			return;
 		}
-
-		const averageInterval =
-			(this.tapTimes[this.tapTimes.length - 1] - this.tapTimes[0]) / (this.tapTimes.length - 1);
-		const bpm = Math.round(60000 / averageInterval);
 		this.saveTempo(file, bpm);
 		new Notice(`Tempo: ${bpm} BPM`);
 	}

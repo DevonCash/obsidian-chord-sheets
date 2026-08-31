@@ -1,4 +1,5 @@
-import {App, Modal, Setting, setTooltip} from "obsidian";
+import {App, Modal, Setting, setTooltip, TextComponent} from "obsidian";
+import {TapTempo} from "./metronome/tapTempo";
 import {
 	Beat,
 	MAX_TEMPO,
@@ -34,6 +35,8 @@ export class MetronomeModal extends Modal {
 	private meta: SongMeta;
 	private beatsEl: HTMLElement | null = null;
 	private patternEl: HTMLElement | null = null;
+	private tempoInput: TextComponent | null = null;
+	private readonly tapTempo = new TapTempo();
 
 	constructor(app: App, meta: SongMeta, private onChange: (meta: SongMeta) => void) {
 		super(app);
@@ -46,8 +49,10 @@ export class MetronomeModal extends Modal {
 
 		new Setting(contentEl)
 			.setName("Tempo")
-			.setDesc("Beats per minute, counting the note value in the time signature's lower number.")
+			.setDesc("Beats per minute, counting the note value in the time signature's lower number. "
+				+ "Tap the button in time to set it by ear.")
 			.addText(text => {
+				this.tempoInput = text;
 				text.inputEl.type = "number";
 				text.inputEl.min = String(MIN_TEMPO);
 				text.inputEl.max = String(MAX_TEMPO);
@@ -56,9 +61,18 @@ export class MetronomeModal extends Modal {
 					const valid = !isNaN(bpm) && bpm >= MIN_TEMPO && bpm <= MAX_TEMPO;
 					text.inputEl.toggleClass("chord-sheet-invalid", !valid);
 					if (valid) {
+						// Typing a tempo abandons any tapping in progress.
+						this.tapTempo.reset();
 						this.apply({bpm});
 					}
 				});
+			})
+			.addButton(button => {
+				button.buttonEl.addClass("chord-sheet-tap-tempo");
+				button
+					.setButtonText("Tap")
+					.setTooltip("Tap in time with the music to set the tempo")
+					.onClick(() => this.tap(button.buttonEl));
 			});
 
 		new Setting(contentEl)
@@ -100,6 +114,21 @@ export class MetronomeModal extends Modal {
 
 	onClose() {
 		this.contentEl.empty();
+	}
+
+	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */
+	private tap(buttonEl: HTMLElement) {
+		const bpm = this.tapTempo.tap(performance.now());
+		// The tempo field is what shows the result, so the button only says whether it has enough to
+		// work from yet.
+		buttonEl.setText(bpm === null ? "Tap again" : "Tap");
+		if (bpm === null) {
+			return;
+		}
+
+		this.tempoInput?.setValue(String(bpm));
+		this.tempoInput?.inputEl.removeClass("chord-sheet-invalid");
+		this.apply({bpm});
 	}
 
 	private apply(changes: Partial<SongMeta>) {
