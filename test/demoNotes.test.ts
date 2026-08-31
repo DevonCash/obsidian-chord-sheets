@@ -7,7 +7,14 @@
 import * as fs from "fs";
 import * as path from "path";
 import {buildSongTimeline, chordAtBeat, SongTimeline} from "../src/metronome/songTiming";
-import {barDurationMs, beatDurationMs, parseSongMeta, patternToString, SongMeta} from "../src/metronome/songMeta";
+import {
+	barDurationMs,
+	beatDurationMs,
+	parseSongMeta,
+	patternToString,
+	SongMeta,
+	tempoUnitNotation
+} from "../src/metronome/songMeta";
 import {tokenizeLine} from "../src/sheet-parsing/tokenizeLine";
 
 const NOTES_DIR = path.join(__dirname, "..", "demo", "notes");
@@ -43,11 +50,20 @@ describe("demo vault notes", () => {
 		expect(barDurationMs(meta!)).toBeCloseTo(2500);
 	});
 
-	it("02 is 12/8 at 180, so a bar lasts 4 seconds and sounds four times", () => {
+	it("02 is 12/8 at a dotted quarter of 60, so a bar lasts 4 seconds and sounds four times", () => {
 		const {meta} = loadNote("02 - 12-8 compound.md");
+		expect(meta!.bpm).toBe(60);
+		expect(tempoUnitNotation(meta!)).toBe("3/8");
 		expect(barDurationMs(meta!)).toBeCloseTo(4000);
 		expect(meta!.pattern.filter(beat => beat !== "silent")).toHaveLength(4);
 		expect(meta!.pattern.filter(beat => beat === "accent")).toHaveLength(1);
+	});
+
+	it("02 written conventionally runs at the same speed as counting eighths would", () => {
+		// A dotted quarter of 60 is three eighths of 180; the demo says so, so it had better be true.
+		const {meta} = loadNote("02 - 12-8 compound.md");
+		const countingEighths = parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!;
+		expect(beatDurationMs(meta!)).toBeCloseTo(beatDurationMs(countingEighths));
 	});
 
 	it("02 gives Em three pulses of its bar and Am the last", () => {

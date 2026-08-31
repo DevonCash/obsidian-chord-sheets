@@ -16,7 +16,10 @@ import {
 	parseTimeSignature,
 	patternToString,
 	SongMeta,
-	timeSignatureToString
+	TEMPO_UNITS,
+	timeSignatureToString,
+	parseTempoUnit,
+	tempoUnitNotation
 } from "./metronome/songMeta";
 
 /**
@@ -68,8 +71,19 @@ export class MetronomeModal extends Modal {
 
 		new Setting(contentEl)
 			.setName("Tempo")
-			.setDesc("Beats per minute, counting the note value in the time signature's lower number. "
-				+ "Tap the button in time to set it by ear.")
+			.setDesc("Beats per minute, and the note value a beat is. Tap the button in time to set the "
+				+ "tempo by ear.")
+			.addDropdown(dropdown => {
+				TEMPO_UNITS.forEach(unit => dropdown.addOption(unit.notation, unit.label));
+				dropdown
+					.setValue(tempoUnitNotation(this.meta))
+					.onChange(notation => {
+						const tempoUnit = parseTempoUnit(notation);
+						if (tempoUnit !== null) {
+							this.apply({tempoUnit});
+						}
+					});
+			})
 			.addText(text => {
 				this.tempoInput = text;
 				text.inputEl.type = "number";

@@ -3,8 +3,10 @@ import {MetronomeModal} from "./metronomeModal";
 import type {PlaybackControl} from "./playbackControl";
 import {AUTOSCROLL_STEPS} from "./scrollPacer";
 import {
+	BEAT_UNIT_PROPERTY,
 	EMPHASIS_PROPERTY,
 	patternToString,
+	tempoUnitNotation,
 	SongMeta,
 	TEMPO_PROPERTY,
 	TIME_SIGNATURE_PROPERTY,
@@ -112,6 +114,7 @@ export class TransportControl {
 		// change straight away, while the note is only rewritten once the editing stops.
 		const save = debounce((meta: SongMeta) => this.saveProperties({
 			[TEMPO_PROPERTY]: meta.bpm,
+			[BEAT_UNIT_PROPERTY]: tempoUnitNotation(meta),
 			[TIME_SIGNATURE_PROPERTY]: timeSignatureToString(meta),
 			[EMPHASIS_PROPERTY]: patternToString(meta)
 		}), 400, true);

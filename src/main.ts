@@ -15,6 +15,7 @@ import {
 import {InstrumentChangeEventDetail} from "./editor-extension/chordBlockToolsWidget";
 import {PLAYBACK_CHANGED_EVENT, PlaybackControl, SPEED_CHANGED_EVENT} from "./playbackControl";
 import {
+	BEAT_UNIT_PROPERTY,
 	EMPHASIS_PROPERTY,
 	MAX_TEMPO,
 	MIN_TEMPO,
@@ -317,6 +318,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 		this.registerMetadataType(AUTOSCROLL_SPEED_PROPERTY, "number");
 		this.registerMetadataType(TEMPO_PROPERTY, "number");
+		this.registerMetadataType(BEAT_UNIT_PROPERTY, "text");
 		this.registerMetadataType(TIME_SIGNATURE_PROPERTY, "text");
 		this.registerMetadataType(EMPHASIS_PROPERTY, "text");
 	}

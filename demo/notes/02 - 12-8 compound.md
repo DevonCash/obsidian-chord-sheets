@@ -1,10 +1,15 @@
 ---
-tempo: 180
+tempo: 60
+beat-unit: 3/8
 time-signature: 12/8
 emphasis: X__x__x__x__
 ---
 
-180 eighth notes per minute, so a bar lasts 4 seconds.
+A dotted quarter at 60, which is how a 12/8 tempo is normally written: four
+pulses to the bar, one a second, so a bar lasts 4 seconds.
+
+Without `beat-unit` the tempo would count the time signature's own note value
+instead — the same music would read as 180 eighth notes per minute.
 
 The emphasis pattern is what keeps this from machine-gunning: twelve beats per
 bar, but only beats 1, 4, 7 and 10 sound — the four dotted-quarter pulses, with

@@ -10,9 +10,36 @@
 
 export type Beat = "accent" | "normal" | "silent";
 
+/** A note value the tempo can be counted in, as a fraction of a whole note. */
+export interface TempoUnit {
+	/** Fraction of a whole note: a quarter note is 0.25, a dotted quarter 0.375. */
+	value: number;
+	/** How it is written in the note's properties. */
+	notation: string;
+	label: string;
+}
+
+/** Note values a tempo is conventionally given in, longest first. */
+export const TEMPO_UNITS: TempoUnit[] = [
+	{value: 1, notation: "1/1", label: "Whole note"},
+	{value: 0.75, notation: "3/4", label: "Dotted half note"},
+	{value: 0.5, notation: "1/2", label: "Half note"},
+	{value: 0.375, notation: "3/8", label: "Dotted quarter note"},
+	{value: 0.25, notation: "1/4", label: "Quarter note"},
+	{value: 0.1875, notation: "3/16", label: "Dotted eighth note"},
+	{value: 0.125, notation: "1/8", label: "Eighth note"},
+	{value: 0.0625, notation: "1/16", label: "Sixteenth note"}
+];
+
 export interface SongMeta {
-	/** Beats per minute, where a "beat" is the note value of the time signature denominator. */
+	/** Beats per minute, where a "beat" is `tempoUnit` — conventionally a quarter note. */
 	bpm: number;
+	/**
+	 * The note value the tempo counts, as a fraction of a whole note. Lets a compound meter be given the
+	 * tempo it is conventionally written with: 12/8 at a dotted quarter of 60 rather than an eighth of
+	 * 180. Everything else here is still measured in the denominator's note value.
+	 */
+	tempoUnit: number;
 	/** Time signature numerator. A measure is worth this many beats. */
 	beatsPerBar: number;
 	/** Time signature denominator. Kept for display; the timing math needs only bpm and beatsPerBar. */
@@ -27,7 +54,22 @@ export interface SongMetaDefaults {
 	emphasis: string;
 }
 
+/**
+ * Parses the note value a tempo is counted in, written the way it is in the properties ("1/4", "3/8").
+ * Returns null for anything that is not one of the conventional note values.
+ */
+export function parseTempoUnit(value: unknown): number | null {
+	const text = asText(value)?.trim();
+	return TEMPO_UNITS.find(unit => unit.notation === text)?.value ?? null;
+}
+
+/** How a tempo unit is written in the note's properties. */
+export function tempoUnitNotation(meta: Pick<SongMeta, "tempoUnit">): string {
+	return TEMPO_UNITS.find(unit => unit.value === meta.tempoUnit)?.notation ?? "1/4";
+}
+
 export const TEMPO_PROPERTY = "tempo";
+export const BEAT_UNIT_PROPERTY = "beat-unit";
 export const TIME_SIGNATURE_PROPERTY = "time-signature";
 export const EMPHASIS_PROPERTY = "emphasis";
 
@@ -127,19 +169,29 @@ export function parseSongMeta(
 
 	return {
 		bpm: clamp(tempo, MIN_TEMPO, MAX_TEMPO),
+		// Absent, the tempo counts the time signature's own note value, as it did before this was
+		// configurable: 4/4 counts quarters, 12/8 counts eighths.
+		tempoUnit: parseTempoUnit(frontmatter?.[BEAT_UNIT_PROPERTY]) ?? 1 / timeSignature.beatUnit,
 		beatsPerBar: timeSignature.beatsPerBar,
 		beatUnit: timeSignature.beatUnit,
 		pattern
 	};
 }
 
-/** Duration of a single beat in milliseconds. */
-export function beatDurationMs(meta: Pick<SongMeta, "bpm">): number {
-	return 60000 / meta.bpm;
+/**
+ * Duration in milliseconds of one unit of the time signature's own note value — the unit measures, slots
+ * and emphasis patterns are all counted in.
+ *
+ * The tempo may be given in a different note value, so it is converted: at a dotted quarter of 60 in
+ * 12/8, each tempo beat covers three eighths, making an eighth 333ms.
+ */
+export function beatDurationMs(meta: Pick<SongMeta, "bpm" | "tempoUnit" | "beatUnit">): number {
+	const signatureUnitsPerTempoUnit = meta.tempoUnit * meta.beatUnit;
+	return 60000 / (meta.bpm * signatureUnitsPerTempoUnit);
 }
 
 /** Duration of one full bar in milliseconds. */
-export function barDurationMs(meta: Pick<SongMeta, "bpm" | "beatsPerBar">): number {
+export function barDurationMs(meta: Pick<SongMeta, "bpm" | "tempoUnit" | "beatUnit" | "beatsPerBar">): number {
 	return beatDurationMs(meta) * meta.beatsPerBar;
 }
 

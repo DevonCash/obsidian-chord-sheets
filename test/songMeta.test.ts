@@ -1,6 +1,9 @@
 import {
 	barDurationMs,
 	beatDurationMs,
+	parseTempoUnit,
+	tempoUnitNotation,
+	TEMPO_UNITS,
 	parseEmphasis,
 	parseSongMeta,
 	parseTimeSignature,
@@ -144,5 +147,65 @@ describe("beat and bar durations", () => {
 		expect(barDurationMs(twelveEight)).toBeCloseTo(4000);
 		expect(beatDurationMs(eightFour)).toBeCloseTo(500);
 		expect(barDurationMs(eightFour)).toBeCloseTo(4000);
+	});
+});
+
+describe("the note value the tempo counts", () => {
+	it("is the time signature's own note value when the property is absent", () => {
+		expect(parseSongMeta({tempo: 120, "time-signature": "4/4"}, defaults)!.tempoUnit).toBe(1 / 4);
+		expect(parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!.tempoUnit).toBe(1 / 8);
+		expect(parseSongMeta({tempo: 100, "time-signature": "2/2"}, defaults)!.tempoUnit).toBe(1 / 2);
+	});
+
+	it.each([
+		["1/4", 0.25],
+		["3/8", 0.375],
+		["1/8", 0.125],
+		["1/2", 0.5],
+		["3/16", 0.1875],
+	])("reads %p as a note value", (notation, value) => {
+		expect(parseTempoUnit(notation)).toBe(value);
+	});
+
+	it.each(["", "2/5", "quarter", "1/3", "5/8"])("rejects %p", (notation) => {
+		expect(parseTempoUnit(notation)).toBeNull();
+	});
+
+	it("round-trips every unit it offers", () => {
+		for (const unit of TEMPO_UNITS) {
+			expect(parseTempoUnit(unit.notation)).toBe(unit.value);
+			expect(tempoUnitNotation({tempoUnit: unit.value})).toBe(unit.notation);
+		}
+	});
+
+	it("lets a compound meter be given its conventional tempo", () => {
+		// The same music, written the two ways: a dotted quarter of 60 is three eighths of 180.
+		const conventional = parseSongMeta(
+			{tempo: 60, "time-signature": "12/8", "beat-unit": "3/8"}, defaults
+		)!;
+		const literal = parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!;
+
+		expect(beatDurationMs(conventional)).toBeCloseTo(beatDurationMs(literal));
+		expect(barDurationMs(conventional)).toBeCloseTo(4000);
+		expect(barDurationMs(literal)).toBeCloseTo(4000);
+	});
+
+	it("counts a half note in cut time", () => {
+		// 2/2 at a half note of 100: two half notes a bar, so a bar is 1.2s.
+		const cutTime = parseSongMeta({tempo: 100, "time-signature": "2/2", "beat-unit": "1/2"}, defaults)!;
+		expect(beatDurationMs(cutTime)).toBeCloseTo(600);
+		expect(barDurationMs(cutTime)).toBeCloseTo(1200);
+	});
+
+	it("leaves a quarter-note tempo in 4/4 exactly as it was", () => {
+		const before = parseSongMeta({tempo: 96, "time-signature": "4/4"}, defaults)!;
+		const after = parseSongMeta({tempo: 96, "time-signature": "4/4", "beat-unit": "1/4"}, defaults)!;
+		expect(beatDurationMs(after)).toBeCloseTo(beatDurationMs(before));
+		expect(beatDurationMs(after)).toBeCloseTo(625);
+	});
+
+	it("falls back to the signature's note value when the property is malformed", () => {
+		const meta = parseSongMeta({tempo: 120, "time-signature": "4/4", "beat-unit": "nonsense"}, defaults)!;
+		expect(meta.tempoUnit).toBe(1 / 4);
 	});
 });
