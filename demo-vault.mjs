@@ -7,10 +7,17 @@
  *
  * The plugin's three files are symlinked rather than copied, so `npm run dev` in another terminal
  * rebuilds straight into the vault; reloading Obsidian is enough to pick a rebuild up.
+ *
+ * Obsidian can only open vaults it has in its own registry, so this adds the demo vault to
+ * obsidian.json (backed up once, next to the original, and never removing anything). A running
+ * Obsidian keeps that list in memory and will not notice a new entry, so it has to be restarted before
+ * the vault can be opened.
  */
 
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
+import { createHash } from "crypto";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -65,7 +72,95 @@ if (!fs.existsSync(enabledPlugins)) {
 console.log(`  Demo vault ready at ${vaultDir}`);
 console.log(`  ${pluginFiles.join(", ")} are symlinked, so \`npm run dev\` rebuilds land here.`);
 
+/** Where Obsidian keeps the list of vaults it knows about. */
+function vaultRegistryPath() {
+	const home = os.homedir();
+	switch (process.platform) {
+		case "darwin":
+			return path.join(home, "Library", "Application Support", "obsidian", "obsidian.json");
+		case "win32":
+			return path.join(process.env.APPDATA ?? path.join(home, "AppData", "Roaming"), "obsidian", "obsidian.json");
+		default:
+			return path.join(process.env.XDG_CONFIG_HOME ?? path.join(home, ".config"), "obsidian", "obsidian.json");
+	}
+}
+
+/**
+ * Adds the demo vault to Obsidian's registry, since `obsidian://open` only resolves vaults already in
+ * it. Existing entries are never touched, and the original file is backed up the first time.
+ * Returns false if the registry could not be read, in which case the vault has to be opened by hand.
+ */
+function registerVault() {
+	const registryPath = vaultRegistryPath();
+	if (!fs.existsSync(registryPath)) {
+		console.log(`  Could not find Obsidian's vault list at ${registryPath}.`);
+		return false;
+	}
+
+	let registry;
+	try {
+		registry = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+	} catch (error) {
+		console.log(`  Could not read Obsidian's vault list (${error.message}).`);
+		return false;
+	}
+
+	const vaults = registry.vaults ?? (registry.vaults = {});
+	if (Object.values(vaults).some(vault => vault.path === vaultDir)) {
+		return true;
+	}
+
+	const backup = `${registryPath}.backup-before-demo-vault`;
+	if (!fs.existsSync(backup)) {
+		fs.copyFileSync(registryPath, backup);
+		console.log(`  Backed up Obsidian's vault list to ${backup}`);
+	}
+
+	// Obsidian keys vaults by a 16 hex character id; deriving it from the path keeps re-runs idempotent
+	// even if the entry is dropped and re-added.
+	const id = createHash("sha256").update(vaultDir).digest("hex").slice(0, 16);
+	vaults[id] = { path: vaultDir, ts: Date.now() };
+	fs.writeFileSync(registryPath, JSON.stringify(registry, null, 2) + "\n");
+	console.log("  Registered the demo vault with Obsidian.");
+	return true;
+}
+
+function obsidianIsRunning() {
+	try {
+		if (process.platform === "win32") {
+			const output = execFileSync("tasklist", ["/fi", "imagename eq Obsidian.exe", "/nh"],
+				{ encoding: "utf8", stdio: "pipe" });
+			return /obsidian/i.test(output);
+		}
+		// pgrep prints matching pids and exits non-zero when there are none, so reaching here is the
+		// answer — its output is a pid, not the process name.
+		execFileSync("pgrep", ["-x", "Obsidian"], { stdio: "pipe" });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
 if (!open) {
+	process.exit(0);
+}
+
+if (!registerVault()) {
+	console.log(`\n  Open it by hand instead: Obsidian -> Open folder as vault -> ${vaultDir}\n`);
+	process.exit(0);
+}
+
+if (obsidianIsRunning()) {
+	// A running Obsidian holds its vault list in memory, so it cannot see the entry just written — and
+	// it rewrites the file from memory when it quits, which drops the entry again. Re-running this
+	// command puts it back.
+	console.log(`
+  Obsidian is already running, and only reads its vault list at startup.
+
+  Quit Obsidian and run \`npm run demo\` again, and it will open the demo vault
+  directly. Or restart Obsidian yourself and pick "demo-vault" from the vault
+  switcher in the bottom left.
+`);
 	process.exit(0);
 }
 
@@ -82,5 +177,5 @@ execFile(opener.command, opener.args, error => {
 		console.error(`  Open this vault by hand instead: ${vaultDir}\n`);
 		process.exit(1);
 	}
-	console.log("  Opening in Obsidian. First time, it will ask to trust the vault.");
+	console.log("  Opening in Obsidian.");
 });
