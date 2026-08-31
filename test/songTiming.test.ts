@@ -4,6 +4,7 @@ import {
 	countMeasures,
 	entryIndexAtBeat,
 	LineMarkerSettings,
+	slotAtBeat,
 	slotAtOffset,
 	slotAtRenderedPosition
 } from "../src/metronome/songTiming";
@@ -378,5 +379,52 @@ describe("slots", () => {
 		// Without bar lines a line is measured by its chords, so markers weigh nothing.
 		const tl = buildSongTimeline(block("Em Am"), "chords", markers, 4);
 		expect(tl.slots.map(s => s.startBeat)).toEqual([0, 4]);
+	});
+});
+
+describe("slotAtBeat", () => {
+	const doc = block("| Em | % | % | Am |");
+	const timeline = buildSongTimeline(doc, "chords", markers, 4);
+	const at = (beat: number) => {
+		const slot = slotAtBeat(timeline, beat);
+		return slot && doc.slice(slot.from, slot.to);
+	};
+
+	it("returns nothing before the song starts", () => {
+		expect(at(-1)).toBeNull();
+	});
+
+	it("advances onto the repeat bars rather than staying on the chord they hold", () => {
+		// This is what makes the highlight track where the song is, not what it is on.
+		expect(at(0)).toBe("Em");
+		expect(at(3.9)).toBe("Em");
+		expect(at(4)).toBe("%");
+		expect(at(8)).toBe("%");
+		expect(at(12)).toBe("Am");
+	});
+
+	it("distinguishes the two repeat bars", () => {
+		expect(slotAtBeat(timeline, 4)!.startBeat).toBe(4);
+		expect(slotAtBeat(timeline, 8)!.startBeat).toBe(8);
+	});
+
+	it("moves through slots within a bar", () => {
+		const bar = block("| Em % % Am |");
+		const tl = buildSongTimeline(bar, "chords", markers, 4);
+		const slice = (beat: number) => {
+			const slot = slotAtBeat(tl, beat);
+			return slot && [bar.slice(slot.from, slot.to), slot.startBeat];
+		};
+		expect(slice(0)).toEqual(["Em", 0]);
+		expect(slice(1)).toEqual(["%", 1]);
+		expect(slice(2)).toEqual(["%", 2]);
+		expect(slice(3)).toEqual(["Am", 3]);
+	});
+
+	it("still leaves the chord lookup reporting the chord being held", () => {
+		// chordAtBeat and slotAtBeat answer different questions, and both are needed.
+		expect(chordAtBeat(timeline, 8)).not.toBeNull();
+		expect(doc.slice(chordAtBeat(timeline, 8)!.from, chordAtBeat(timeline, 8)!.to)).toBe("Em");
+		expect(at(8)).toBe("%");
 	});
 });

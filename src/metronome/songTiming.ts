@@ -325,6 +325,14 @@ export function chordAtBeat(timeline: SongTimeline, beat: number): ChordOccurren
 	return timeline.chords[indexAtBeat(timeline.chords, beat)] ?? null;
 }
 
+/**
+ * The slot being played at `beat`, or null before the song reaches the first one. Unlike the chord, this
+ * advances through a bar of repeat markers, so it tracks where the song is rather than what it is on.
+ */
+export function slotAtBeat(timeline: SongTimeline, beat: number): SlotOccurrence | null {
+	return timeline.slots[indexAtBeat(timeline.slots, beat)] ?? null;
+}
+
 /** The slot covering a document offset, so a click in the editor can be resolved to a beat. */
 export function slotAtOffset(timeline: SongTimeline, offset: number): SlotOccurrence | null {
 	return timeline.slots.find(slot => offset >= slot.from && offset <= slot.to) ?? null;

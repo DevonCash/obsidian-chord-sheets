@@ -1,24 +1,27 @@
 import {MarkdownView} from "obsidian";
 import {EditorView} from "@codemirror/view";
 import {setCurrentChordEffect} from "./editor-extension/currentChordField";
-import {ChordOccurrence} from "./metronome/songTiming";
-import {renderedBlockLines} from "./renderedChordBlocks";
+import {SlotOccurrence} from "./metronome/songTiming";
+import {renderedBlockLines, SLOT_SELECTOR} from "./renderedChordBlocks";
 
 const PLAYING_CLASS = "chord-sheet-chord-playing";
 
 /**
- * Highlights the chord currently being played, in whichever mode the note is being viewed in: through a
- * decoration in the editor, and by marking the rendered chord span in reading mode.
+ * Highlights where the song currently is, in whichever mode the note is being viewed in: through a
+ * decoration in the editor, and by marking the rendered element in reading mode.
+ *
+ * This follows the slot rather than the chord, so it keeps moving through a bar of repeat markers
+ * instead of sitting on the chord those markers are holding.
  */
 export class ChordHighlighter {
-	private current: ChordOccurrence | null = null;
+	private current: SlotOccurrence | null = null;
 	private currentMode: string | null = null;
 	private highlightedEl: Element | null = null;
 
 	constructor(private view: MarkdownView) {
 	}
 
-	show(chord: ChordOccurrence | null) {
+	show(chord: SlotOccurrence | null) {
 		const mode = this.view.getMode();
 		if (chord === this.current && mode === this.currentMode && this.isStillApplied()) {
 			return;
@@ -60,7 +63,7 @@ export class ChordHighlighter {
 			|| !!this.highlightedEl?.isConnected;
 	}
 
-	private highlightEditorChord(chord: ChordOccurrence | null) {
+	private highlightEditorChord(chord: SlotOccurrence | null) {
 		const editorView = this.view.editor?.cm as EditorView | undefined;
 		if (!editorView) {
 			return;
@@ -72,7 +75,7 @@ export class ChordHighlighter {
 		editorView.dispatch({effects: setCurrentChordEffect.of(range)});
 	}
 
-	private highlightRenderedChord(chord: ChordOccurrence | null) {
+	private highlightRenderedChord(chord: SlotOccurrence | null) {
 		this.highlightedEl?.removeClass(PLAYING_CLASS);
 		this.highlightedEl = null;
 
@@ -81,7 +84,7 @@ export class ChordHighlighter {
 		}
 
 		const lineEl = renderedBlockLines(this.view, chord.blockStartLine)?.[chord.lineInBlock];
-		const chordEl = lineEl?.querySelectorAll(".chord-sheet-chord").item(chord.chordInLine);
+		const chordEl = lineEl?.querySelectorAll(SLOT_SELECTOR).item(chord.tokenIndexInLine);
 		if (chordEl) {
 			chordEl.addClass(PLAYING_CLASS);
 			this.highlightedEl = chordEl;

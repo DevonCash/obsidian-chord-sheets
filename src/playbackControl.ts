@@ -6,7 +6,7 @@ import {Transport} from "./metronome/transport";
 import {parseSongMeta, SongMeta} from "./metronome/songMeta";
 import {
 	buildSongTimeline,
-	chordAtBeat,
+	slotAtBeat,
 	slotAtOffset,
 	slotAtRenderedPosition,
 	SlotOccurrence,
@@ -92,15 +92,12 @@ export class PlaybackControl extends Component {
 
 	/**
 	 * Moves playback to a slot, so a phrase can be picked up from where it starts. The bar phase is kept,
-	 * so a slot falling on beat 3 is counted as beat 3. The highlight follows the chord governing that
-	 * slot, which for a bar of repeat markers is the chord they are holding.
+	 * so a slot falling on beat 3 is counted as beat 3.
 	 */
 	seekToSlot(slot: SlotOccurrence) {
 		this.transport.seek(slot.startBeat);
 		this.click.resync();
-		if (this.timeline) {
-			this.highlighter.show(chordAtBeat(this.timeline, slot.startBeat));
-		}
+		this.highlighter.show(slot);
 	}
 
 	/** The slot covering a document offset, if the song has one there. */
@@ -343,7 +340,7 @@ export class PlaybackControl extends Component {
 		if (!this.settings.highlightCurrentChord || !this.timeline) {
 			return;
 		}
-		this.highlighter.show(chordAtBeat(this.timeline, this.transport.currentBeat()));
+		this.highlighter.show(slotAtBeat(this.timeline, this.transport.currentBeat()));
 	}
 
 	private showControl() {

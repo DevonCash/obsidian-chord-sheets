@@ -30,12 +30,10 @@ import {addCustomChordTypes} from "./customChordTypes";
 import {enharmonicToggle, transpose} from "./chordProcessing";
 import {Instrument} from "./instruments/types";
 import {instruments} from "./instruments/instruments";
+import {SLOT_SELECTOR} from "./renderedChordBlocks";
 
 
 const AUTOSCROLL_SPEED_PROPERTY = "autoscroll-speed";
-
-/** Chords and rhythm markers are both places the song can be moved to by clicking. */
-const SLOT_SELECTOR = ".chord-sheet-chord, .chord-sheet-rhythm-marker";
 
 export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlugin {
 	declare settings: ChordSheetsSettings;
