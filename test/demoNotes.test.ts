@@ -6,7 +6,7 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import {buildSongTimeline, SongTimeline} from "../src/metronome/songTiming";
+import {buildSongTimeline, chordAtBeat, SongTimeline} from "../src/metronome/songTiming";
 import {barDurationMs, beatDurationMs, parseSongMeta, patternToString, SongMeta} from "../src/metronome/songMeta";
 import {tokenizeLine} from "../src/sheet-parsing/tokenizeLine";
 
@@ -121,6 +121,25 @@ describe("demo vault notes", () => {
 			const result = tokenizeLine("[G]Baby[1] come back", 0, markers.chordLineMarker, markers.textLineMarker);
 			expect(result.isChordLine).toBe(false);
 			expect(result.tokens.filter(t => t.type === "chord").map(t => t.value)).toEqual(["[G]"]);
+		});
+	});
+
+	describe("07 counts in with a bar of repeat markers", () => {
+		const chords = chordSeconds("07 - Count-in.md");
+
+		it("delays the first chord by the bar of count-in", () => {
+			// 4/4 at 96 BPM is a 2.5s bar. One bar of count-in, then two bars, then two bars of count-in.
+			expect(chords).toEqual([
+				["Em", 2.5], ["Am", 3.75], ["C", 5], ["G", 6.25],
+				["Em", 12.5], ["Am", 13.75], ["C", 15], ["G", 16.25]
+			]);
+		});
+
+		it("has nothing to highlight during the count-in", () => {
+			const {timeline} = loadNote("07 - Count-in.md");
+			expect(chordAtBeat(timeline!, 0)).toBeNull();
+			expect(chordAtBeat(timeline!, 3.9)).toBeNull();
+			expect(chordAtBeat(timeline!, 4)).not.toBeNull();
 		});
 	});
 

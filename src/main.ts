@@ -127,6 +127,14 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		});
 
 
+		this.registerDomEvent(document, "click", (event: MouseEvent) => {
+			const target = event.target as HTMLElement | null;
+			if (target?.closest(".chord-sheet-chord")) {
+				this.seekToClickedChord(target);
+			}
+		});
+
+
 		// Handle obsidian events
 
 		// Rebuilding the action buttons is cheap and must follow edits, but stopping playback must not:
@@ -435,6 +443,11 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		editor.plugin(this.editorPlugin)?.applyChanges(changes);
 	}
 
+	/** The view action shows and hides the controls; pausing is done on the controls themselves. */
+	private togglePlaybackControls(view: MarkdownView) {
+		this.getPlaybackControl(view)?.toggleControls();
+	}
+
 	private toggleAutoscroll(view: MarkdownView) {
 		const playbackControl = this.getPlaybackControl(view);
 		if (!playbackControl) {
@@ -446,6 +459,50 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		} else {
 			playbackControl.startScroll();
 		}
+	}
+
+	/**
+	 * Clicking a chord moves playback to it, so a phrase can be picked up from where it starts. Only
+	 * while the controls are up, so it does not interfere with ordinary editing.
+	 */
+	private seekToClickedChord(target: HTMLElement) {
+		const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+		const playbackControl = view && this.viewPlaybackControlMap.get(view);
+		if (!view || !playbackControl?.isControlVisible) {
+			return;
+		}
+
+		const chord = view.getMode() === "preview"
+			? this.renderedChordAt(playbackControl, target)
+			: this.editorChordAt(view, playbackControl, target);
+
+		if (chord) {
+			playbackControl.seekToChord(chord);
+		}
+	}
+
+	private editorChordAt(view: MarkdownView, playbackControl: PlaybackControl, target: HTMLElement) {
+		const editorView = view.editor?.cm as EditorView | undefined;
+		if (!editorView) {
+			return null;
+		}
+		return playbackControl.chordAtOffset(editorView.posAtDOM(target));
+	}
+
+	private renderedChordAt(playbackControl: PlaybackControl, target: HTMLElement) {
+		const chordEl = target.closest(".chord-sheet-chord");
+		const lineEl = chordEl?.parentElement;
+		const blockEl = chordEl?.closest("[data-chord-sheet-block-line]") as HTMLElement | null;
+		if (!chordEl || !lineEl || !blockEl?.dataset.chordSheetBlockLine) {
+			return null;
+		}
+
+		const linesEl = lineEl.parentElement;
+		return playbackControl.chordAtRenderedPosition(
+			parseInt(blockEl.dataset.chordSheetBlockLine, 10),
+			linesEl ? Array.from(linesEl.children).indexOf(lineEl) : -1,
+			Array.from(lineEl.querySelectorAll(".chord-sheet-chord")).indexOf(chordEl)
+		);
 	}
 
 	private async toggleMetronome(view: MarkdownView) {
@@ -474,10 +531,12 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		const playbackControl = this.viewPlaybackControlMap.get(view);
 		const hasChordBlocks = plugin.hasChordBlocks();
 
+		const controlsVisible = playbackControl?.isControlVisible ?? false;
 		this.updateActionButton(
 			view, ".chord-sheet-autoscroll-action", this.settings.showAutoscrollButton, hasChordBlocks,
-			playbackControl?.isRunning ? "pause-circle" : "play-circle", "Toggle autoscroll",
-			() => this.toggleAutoscroll(view)
+			controlsVisible ? "music" : "play-circle",
+			controlsVisible ? "Hide playback controls" : "Show playback controls",
+			() => this.togglePlaybackControls(view)
 		);
 
 		this.updateActionButton(

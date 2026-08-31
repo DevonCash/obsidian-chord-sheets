@@ -4,7 +4,7 @@ import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
 import {MetronomeClick} from "./metronome/click";
 import {Transport} from "./metronome/transport";
 import {parseSongMeta, SongMeta} from "./metronome/songMeta";
-import {buildSongTimeline, chordAtBeat, SongTimeline} from "./metronome/songTiming";
+import {buildSongTimeline, chordAtBeat, ChordOccurrence, SongTimeline} from "./metronome/songTiming";
 import {ChordHighlighter} from "./chordHighlight";
 import {TransportControl} from "./transportControl";
 
@@ -26,6 +26,8 @@ export class PlaybackControl extends Component {
 	private lastFrameTime = 0;
 
 	private scrolling = false;
+	/** Whether the on-screen controls are showing. Independent of whether anything is playing. */
+	private controlsVisible = false;
 	/** Scroll offset accumulated from the user scrolling by hand, so nudging the view re-anchors it. */
 	private userScrollOffset = 0;
 	private lastAppliedScrollTop: number | null = null;
@@ -59,6 +61,46 @@ export class PlaybackControl extends Component {
 
 	get isMetronomeRunning(): boolean {
 		return this.click.isRunning;
+	}
+
+	get isControlVisible(): boolean {
+		return this.controlsVisible;
+	}
+
+	/** Shows the controls, or hides them and stops playback with them. */
+	toggleControls() {
+		if (this.controlsVisible) {
+			// Nothing should keep clicking once its controls are out of sight.
+			this.stop();
+		} else {
+			this.controlsVisible = true;
+			this.showControl();
+			this.events.trigger(PLAYBACK_CHANGED_EVENT);
+		}
+	}
+
+	/**
+	 * Moves playback to a chord, so a phrase can be picked up from where it starts. The bar phase is
+	 * kept, so a chord falling on beat 3 is counted as beat 3.
+	 */
+	seekToChord(chord: ChordOccurrence) {
+		this.transport.seek(chord.startBeat);
+		this.click.resync();
+		this.highlighter.show(chord);
+	}
+
+	/** The chord whose symbol covers a document offset, if the song has one there. */
+	chordAtOffset(offset: number): ChordOccurrence | null {
+		return this.timeline?.chords.find(chord => offset >= chord.from && offset <= chord.to) ?? null;
+	}
+
+	/** The chord rendered at a given place in reading mode. */
+	chordAtRenderedPosition(blockStartLine: number, lineInBlock: number, chordInLine: number): ChordOccurrence | null {
+		return this.timeline?.chords.find(chord =>
+			chord.blockStartLine === blockStartLine
+			&& chord.lineInBlock === lineInBlock
+			&& chord.chordInLine === chordInLine
+		) ?? null;
 	}
 
 	get songMeta(): SongMeta | null {
@@ -123,6 +165,7 @@ export class PlaybackControl extends Component {
 			return;
 		}
 		this.scrolling = true;
+		this.controlsVisible = true;
 		this.userScrollOffset = 0;
 		this.lastAppliedScrollTop = null;
 		// Build from the current document, so edits made since the last run are accounted for.
@@ -150,6 +193,7 @@ export class PlaybackControl extends Component {
 		}
 		// Must happen in response to a user gesture, otherwise the audio context stays suspended.
 		const audioContext = await this.click.prepareAudio();
+		this.controlsVisible = true;
 		this.transport.setAudioContext(audioContext);
 		// Rebuild so the chord highlight follows edits made since the last run.
 		this.pacer = this.createPacer();
@@ -173,14 +217,15 @@ export class PlaybackControl extends Component {
 
 	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */
 	stop() {
-		const wasPlaying = this.isPlaying;
+		const wasShowing = this.isPlaying || this.controlsVisible;
 		this.scrolling = false;
+		this.controlsVisible = false;
 		this.click.stop();
 		this.stopFrames();
 		this.transport.pause();
 		this.transport.reset();
 		this.hideControl();
-		if (wasPlaying) {
+		if (wasShowing) {
 			this.events.trigger(PLAYBACK_CHANGED_EVENT);
 		}
 	}
@@ -303,12 +348,9 @@ export class PlaybackControl extends Component {
 		this.control.update();
 	}
 
+	/** Pausing leaves the controls up; only hiding them takes them away. */
 	private updateControlVisibility() {
-		if (!this.scrolling && !this.click.isRunning) {
-			this.hideControl();
-		} else {
-			this.control?.update();
-		}
+		this.control?.update();
 	}
 
 	private hideControl() {

@@ -61,6 +61,15 @@ export class MetronomeClick {
 		this.schedulerId = window.setInterval(() => this.schedule(), SCHEDULER_INTERVAL_MS);
 	}
 
+	/**
+	 * Picks the beat count back up from wherever the transport now is. Needed after a seek: the next beat
+	 * to schedule was chosen against the old position, and would otherwise fire a burst of catch-up
+	 * clicks or go quiet until the song caught up again.
+	 */
+	resync() {
+		this.nextBeat = Math.ceil(this.transport.currentBeat());
+	}
+
 	stop() {
 		if (this.schedulerId !== null) {
 			window.clearInterval(this.schedulerId);

@@ -887,19 +887,25 @@ svg.enharmonic-toggle {
 
 .chord-sheet-autoscroll-control {
 	position: absolute;
-	inset-inline: 0;
-	/* Lifted clear of Obsidian's floating status bar; set from the view, see liftClearOfStatusBar. */
-	bottom: var(--chord-sheet-transport-bottom, 0px);
+	/* A cluster floating in from the right, rather than a bar across the whole view. */
+	right: var(--size-4-4);
+	left: auto;
+	/* Clear of Obsidian's floating status bar (measured by the view, see liftClearOfStatusBar) with a
+	   gap so the two do not read as one strip. */
+	bottom: calc(var(--chord-sheet-transport-bottom, 0px) + 0.75em);
 	z-index: var(--layer-status-bar, 15);
 
 	display: flex;
-	justify-content: flex-end;
 	align-items: center;
 	gap: 0.4rem;
-	padding-right: var(--size-4-5);
-	border-top: 1px solid var(--divider-color);
+	/* No left padding, so the play button can sit flush against the rounded edge. */
+	padding: 0 var(--size-4-2) 0 0;
 	min-height: 3.2rem;
+	overflow: hidden;
 
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-s);
 	background-color: var(--background-primary);
 	color: var(--text-muted);
 	font-size: var(--file-header-font-size);
@@ -945,6 +951,7 @@ svg.enharmonic-toggle {
 	height: auto;
 	padding: 0 var(--size-4-3);
 	border-radius: 0;
+	margin-right: var(--size-2-1);
 }
 
 .chord-sheet-autoscroll-control button.chord-sheet-transport-play .svg-icon {

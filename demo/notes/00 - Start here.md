@@ -20,6 +20,7 @@ Open a note, then use the ribbon buttons at the top right, or the commands
 | [[04 - No tempo]] | Falls back to the original speed slider |
 | [[05 - Notation edge cases]] | Bar-line and repeat notations, and lines that must stay lyrics |
 | [[06 - Long song]] | Long enough to actually scroll for a few minutes |
+| [[07 - Count-in]] | A bar of `%` before the first chord counts you in |
 
 ## Two scrolling styles
 

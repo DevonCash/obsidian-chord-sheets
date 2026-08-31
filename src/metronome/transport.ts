@@ -71,6 +71,15 @@ export class Transport {
 		this.running = false;
 	}
 
+	/**
+	 * Moves playback to a given beat, keeping the bar phase that beat falls on — seeking to a chord that
+	 * starts on beat 3 of its bar leaves the count on 3, rather than restarting it.
+	 */
+	seek(beat: number) {
+		this.beatOffset = beat;
+		this.startedAt = this.now();
+	}
+
 	/** Rewinds to the beginning of the song. */
 	reset() {
 		this.beatOffset = 0;
