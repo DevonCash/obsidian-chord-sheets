@@ -33,7 +33,6 @@ export interface ChordSheetsSettings {
 	// Metronome and tempo-aware autoscroll
 	metronomeVolume: number;
 	metronomeMuted: boolean;
-	showMetronomeButton: ShowAutoscrollButtonSetting;
 	defaultTempo: number;
 	defaultTimeSignature: string;
 	defaultEmphasis: string;
@@ -66,7 +65,6 @@ export const DEFAULT_SETTINGS: ChordSheetsSettings = {
 
 	metronomeVolume: 0.5,
 	metronomeMuted: false,
-	showMetronomeButton: "chord-blocks",
 	defaultTempo: 100,
 	defaultTimeSignature: "4/4",
 	defaultEmphasis: "X",

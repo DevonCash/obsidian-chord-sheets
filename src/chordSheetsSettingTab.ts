@@ -435,24 +435,6 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 				})
 			);
 
-		const showMetronomeButtonOptions: Record<ShowAutoscrollButtonSetting, string> = {
-			never: "Never",
-			"chord-blocks": "When note has chord blocks",
-			always: "Always"
-		};
-		new Setting(containerEl)
-			.setName('Show metronome view action button')
-			.addDropdown(dropdown => dropdown
-				.addOptions(showMetronomeButtonOptions)
-				.setValue(this.plugin.settings.showMetronomeButton)
-				.onChange(async (value: ShowAutoscrollButtonSetting) => {
-					this.plugin.stopAllPlayback();
-					this.plugin.settings.showMetronomeButton = value;
-					await this.plugin.saveSettings();
-				})
-			);
-
-
 		new Setting(containerEl).setName('Chord block syntax').setHeading();
 
 

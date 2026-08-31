@@ -532,12 +532,6 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			() => this.togglePlaybackControls(view)
 		);
 
-		const muted = playbackControl?.isMuted ?? this.settings.metronomeMuted;
-		this.updateActionButton(
-			view, ".chord-sheet-metronome-action", this.settings.showMetronomeButton, hasChordBlocks,
-			muted ? "volume-x" : "volume-2", muted ? "Unmute metronome" : "Mute metronome",
-			() => this.toggleMute(view)
-		);
 	}
 
 	private updateActionButton(
