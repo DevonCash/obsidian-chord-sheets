@@ -897,9 +897,9 @@ svg.enharmonic-toggle {
 
 	display: flex;
 	align-items: center;
-	gap: 0.4rem;
-	/* No left padding, so the play button can sit flush against the rounded edge. */
-	padding: 0 var(--size-4-2) 0 0;
+	/* No padding or gaps: the segments meet each other, and the pill's radius clips the outer ends. */
+	gap: 0;
+	padding: 0;
 	min-height: 3.2rem;
 	overflow: hidden;
 
@@ -911,82 +911,54 @@ svg.enharmonic-toggle {
 	font-size: var(--file-header-font-size);
 
 	.slider {
-		margin-inline-start: 0.4rem;
+		margin-inline: 0.4rem var(--size-4-3);
 	}
 }
 
 .chord-sheet-transport-label {
 	white-space: nowrap;
+	padding-left: var(--size-4-3);
 }
 
-.chord-sheet-autoscroll-control button.chord-sheet-transport-button {
+/* Every control in the cluster is the same thing: a full-height segment of the pill. */
+.chord-sheet-autoscroll-control button {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 0 var(--size-2-2);
-	height: 1.4rem;
+	align-self: stretch;
+	height: auto;
+	padding: 0 var(--size-4-3);
+	border: none;
+	border-radius: 0;
 	box-shadow: none;
 	background: transparent;
 	color: var(--text-muted);
 	cursor: pointer;
 }
 
-.chord-sheet-autoscroll-control button.chord-sheet-transport-button:hover {
+.chord-sheet-autoscroll-control button:hover {
 	color: var(--text-normal);
 	background-color: var(--background-modifier-hover);
 }
 
-.chord-sheet-autoscroll-control button.chord-sheet-transport-button.is-active {
+.chord-sheet-autoscroll-control button.is-active {
 	color: var(--chord-sheet-transport-active-color, var(--text-accent));
 }
 
-.chord-sheet-autoscroll-control button.chord-sheet-transport-button .svg-icon {
-	width: var(--icon-s);
-	height: var(--icon-s);
-}
-
-/* The primary transport control fills the height of the bar. */
-.chord-sheet-autoscroll-control button.chord-sheet-transport-play {
-	align-self: stretch;
-	height: auto;
-	padding: 0 var(--size-4-3);
-	border-radius: 0;
-	margin-right: var(--size-2-1);
-}
-
-.chord-sheet-autoscroll-control button.chord-sheet-transport-play .svg-icon {
+.chord-sheet-autoscroll-control button .svg-icon {
 	width: var(--icon-l);
 	height: var(--icon-l);
 }
 
-.chord-sheet-autoscroll-control input.chord-sheet-transport-tempo {
-	width: 4.5rem;
+/* Segments are divided by a hairline rather than by differing in shape. */
+.chord-sheet-autoscroll-control button + button {
+	border-left: 1px solid var(--background-modifier-border);
 }
 
-.chord-sheet-autoscroll-control input.chord-sheet-transport-time-signature {
-	width: 3.5rem;
-}
-
-/* The song's settings at a glance, and the way into the dialog that edits them. */
+/* The settings segment stacks its content, but is otherwise the same button as the rest. */
 .chord-sheet-autoscroll-control button.chord-sheet-transport-settings {
-	display: flex;
 	flex-direction: column;
-	align-items: center;
-	justify-content: center;
 	gap: 2px;
-	height: 2.6rem;
-	padding: 0 var(--size-4-2);
-	box-shadow: none;
-	background: transparent;
-	border: 1px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	color: var(--text-muted);
-	cursor: pointer;
-}
-
-.chord-sheet-autoscroll-control button.chord-sheet-transport-settings:hover {
-	background-color: var(--background-modifier-hover);
-	color: var(--text-normal);
 }
 
 .chord-sheet-transport-summary {

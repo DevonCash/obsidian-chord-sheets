@@ -40,9 +40,7 @@ export class TransportControl {
 		this.containerEl = containerEl;
 		this.liftClearOfStatusBar(containerEl);
 
-		this.scrollButton = containerEl.createEl("button", {
-			cls: ["chord-sheet-transport-button", "chord-sheet-transport-play"]
-		});
+		this.scrollButton = containerEl.createEl("button", {cls: "chord-sheet-transport-play"});
 		// One transport control: it starts and stops the scroll and the click together.
 		this.scrollButton.addEventListener("click", () => void (async () => {
 			await this.playback.togglePlay();
@@ -67,7 +65,7 @@ export class TransportControl {
 
 	private renderMetronomeControls(containerEl: HTMLElement, songMeta: SongMeta) {
 		// Only silences the click; it never starts or stops the song.
-		this.metronomeButton = containerEl.createEl("button", {cls: "chord-sheet-transport-button"});
+		this.metronomeButton = containerEl.createEl("button", {cls: "chord-sheet-transport-mute"});
 		this.metronomeButton.addEventListener("click", () => {
 			this.playback.toggleMute();
 			this.update();
