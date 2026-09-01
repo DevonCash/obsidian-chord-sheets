@@ -3,7 +3,7 @@ import {ChordSheetsSettings} from "./chordSheetsSettings";
 import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
 import {MetronomeClick} from "./metronome/click";
 import {Transport} from "./metronome/transport";
-import {Beat, parseSongMeta, SongMeta} from "./metronome/songMeta";
+import {Beat, beatsPerMeasure, parseSongMeta, SongMeta} from "./metronome/songMeta";
 import {
 	buildSongTimeline,
 	slotAtBeat,
@@ -328,7 +328,7 @@ export class PlaybackControl extends Component {
 				this.view.data,
 				this.settings.blockLanguageSpecifier,
 				this.settings,
-				this._songMeta.beatsPerBar
+				beatsPerMeasure(this._songMeta)
 			)
 			: null;
 

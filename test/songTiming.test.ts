@@ -144,7 +144,7 @@ describe("buildSongTimeline", () => {
 			const timeline = buildSongTimeline(doc, "chords", markers, beatsPerBar);
 			expect(timeline.entries.map(e => e.startBeat)).toEqual(startBeats);
 			expect(timeline.totalBeats).toBe(totalBeats);
-			expect(timeline.beatsPerBar).toBe(beatsPerBar);
+			expect(timeline.beatsPerMeasure).toBe(beatsPerBar);
 		});
 	});
 });
@@ -455,5 +455,30 @@ describe("markers written without spaces", () => {
 		expect(slotAtRenderedPosition(timeline, 0, 0, 5)?.startBeat).toBe(8);
 		// The bar lines between them are still dividers, not beats.
 		expect(slotAtRenderedPosition(timeline, 0, 0, 4)).toBeNull();
+	});
+});
+
+describe("a sheet whose symbols each stand for several measures", () => {
+	// Written once per four bars: | Em | Am | is eight bars of music, not two.
+	const doc = block("| Em | Am |");
+
+	it("stretches every measure by the same factor", () => {
+		const plain = buildSongTimeline(doc, "chords", markers, 4);
+		const fourfold = buildSongTimeline(doc, "chords", markers, 16);
+
+		expect(plain.slots.map(s => s.startBeat)).toEqual([0, 4]);
+		expect(fourfold.slots.map(s => s.startBeat)).toEqual([0, 16]);
+		expect(fourfold.totalBeats).toBe(plain.totalBeats * 4);
+	});
+
+	it("still counts the measures as written", () => {
+		// The notated measure count does not change; only how long each one lasts.
+		expect(buildSongTimeline(doc, "chords", markers, 16).entries[0].measures).toBe(2);
+	});
+
+	it("divides a stretched measure between its slots", () => {
+		// | Em % % Am | over four bars of 4/4: each slot is a bar.
+		const timeline = buildSongTimeline(block("| Em % % Am |"), "chords", markers, 16);
+		expect(timeline.slots.map(s => s.startBeat)).toEqual([0, 4, 8, 12]);
 	});
 });

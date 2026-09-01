@@ -4,7 +4,7 @@
  *
  * Measure counting: a chord line containing bar lines is divided into measures by those bar lines
  * (`| Em Am | C |` is two measures); a chord line without bar lines counts one measure per chord symbol
- * (`Em Am C` is three measures). Each measure is worth `beatsPerBar` beats, so notating a song in 8/4 to
+ * (`Em Am C` is three measures). Each measure is worth `beatsPerMeasure` beats, so notating a song in 8/4 to
  * get two 4/4 bars' worth of time per chord needs no special handling here.
  *
  * Pure module (no obsidian imports) so it stays testable under the jest "node" environment. It scans for
@@ -66,7 +66,11 @@ export interface SongTimeline {
 	chords: ChordOccurrence[];
 	slots: SlotOccurrence[];
 	totalBeats: number;
-	beatsPerBar: number;
+	/**
+	 * Beats one notated measure lasts. Not necessarily a bar: a sheet whose symbols each stand for
+	 * several measures counts them all here.
+	 */
+	beatsPerMeasure: number;
 }
 
 export interface LineMarkerSettings {
@@ -174,14 +178,14 @@ function measureSlots(tokenizedLine: TokenizedLine): LineSlot[][] {
 function lineSlots(
 	tokenizedLine: TokenizedLine,
 	lineStartBeat: number,
-	beatsPerBar: number
+	beatsPerMeasure: number
 ): (LineSlot & {startBeat: number})[] {
 	const slots: (LineSlot & {startBeat: number})[] = [];
 
 	if (tokenizedLine.tokens.some(token => isBarLine(token))) {
 		measureSlots(tokenizedLine).forEach((measure, measureIndex) => {
 			measure.forEach((slot, slotIndex) => {
-				const offset = (measureIndex + slotIndex / measure.length) * beatsPerBar;
+				const offset = (measureIndex + slotIndex / measure.length) * beatsPerMeasure;
 				slots.push({...slot, startBeat: lineStartBeat + offset});
 			});
 		});
@@ -197,7 +201,7 @@ function lineSlots(
 				token,
 				range: token.range,
 				tokenIndexInLine: tokenIndexInLine++,
-				startBeat: lineStartBeat + chordCount++ * beatsPerBar
+				startBeat: lineStartBeat + chordCount++ * beatsPerMeasure
 			});
 		} else if (isRhythmToken(token)) {
 			tokenIndexInLine++;
@@ -219,7 +223,7 @@ export function buildSongTimeline(
 	docText: string,
 	languageSpecifier: string,
 	settings: LineMarkerSettings,
-	beatsPerBar: number
+	beatsPerMeasure: number
 ): SongTimeline {
 	const openingFence = chordBlockFencePattern(languageSpecifier);
 	const closingFence = /^\s*(?:~{3,}|`{3,})\s*$/;
@@ -263,7 +267,7 @@ export function buildSongTimeline(
 				entries.push({blockIndex, blockStartLine, lineInBlock, docLine, measures, startBeat});
 
 				let chordInLine = 0;
-				for (const slot of lineSlots(tokenizedLine, startBeat, beatsPerBar)) {
+				for (const slot of lineSlots(tokenizedLine, startBeat, beatsPerMeasure)) {
 					// tokenizeLine was given a zero line index, so the slot ranges are line-relative.
 					const occurrence: SlotOccurrence = {
 						startBeat: slot.startBeat,
@@ -281,14 +285,14 @@ export function buildSongTimeline(
 					}
 				}
 
-				startBeat += measures * beatsPerBar;
+				startBeat += measures * beatsPerMeasure;
 			}
 		}
 
 		lineInBlock++;
 	}
 
-	return {entries, chords, slots, totalBeats: startBeat, beatsPerBar};
+	return {entries, chords, slots, totalBeats: startBeat, beatsPerMeasure};
 }
 
 /**

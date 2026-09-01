@@ -5,6 +5,7 @@ import {AUTOSCROLL_STEPS} from "./scrollPacer";
 import {
 	BEAT_UNIT_PROPERTY,
 	EMPHASIS_PROPERTY,
+	MEASURES_PER_SYMBOL_PROPERTY,
 	patternToString,
 	tempoUnitNotation,
 	SongMeta,
@@ -116,6 +117,7 @@ export class TransportControl {
 			[TEMPO_PROPERTY]: meta.bpm,
 			[BEAT_UNIT_PROPERTY]: tempoUnitNotation(meta),
 			[TIME_SIGNATURE_PROPERTY]: timeSignatureToString(meta),
+			[MEASURES_PER_SYMBOL_PROPERTY]: meta.measuresPerSymbol,
 			[EMPHASIS_PROPERTY]: patternToString(meta)
 		}), 400, true);
 

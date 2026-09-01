@@ -1,6 +1,7 @@
 import {
 	barDurationMs,
 	beatDurationMs,
+	beatsPerMeasure,
 	defaultEmphasis,
 	parseTempoUnit,
 	tempoUnitNotation,
@@ -299,5 +300,46 @@ describe("how a meter is counted when the note does not say", () => {
 				expect(pattern[0]).toBe("accent");
 			}
 		}
+	});
+});
+
+describe("measures per symbol", () => {
+	it("is one when the note does not say", () => {
+		expect(parseSongMeta({tempo: 120}, defaults)!.measuresPerSymbol).toBe(1);
+	});
+
+	it("reads the property", () => {
+		expect(parseSongMeta({tempo: 120, "measures-per-symbol": 4}, defaults)!.measuresPerSymbol).toBe(4);
+		expect(parseSongMeta({tempo: 120, "measures-per-symbol": "2"}, defaults)!.measuresPerSymbol).toBe(2);
+	});
+
+	it.each([0, -3, "nonsense", ""])("falls back to one for %p", (value) => {
+		expect(parseSongMeta({tempo: 120, "measures-per-symbol": value}, defaults)!.measuresPerSymbol)
+			.toBe(1);
+	});
+
+	it("clamps an absurd value", () => {
+		expect(parseSongMeta({tempo: 120, "measures-per-symbol": 999}, defaults)!.measuresPerSymbol)
+			.toBe(16);
+	});
+
+	it("stretches a notated measure by that many bars", () => {
+		const once = parseSongMeta({tempo: 120, "time-signature": "4/4"}, defaults)!;
+		const fourfold = parseSongMeta(
+			{tempo: 120, "time-signature": "4/4", "measures-per-symbol": 4}, defaults
+		)!;
+
+		expect(beatsPerMeasure(once)).toBe(4);
+		expect(beatsPerMeasure(fourfold)).toBe(16);
+		// The beat itself is untouched — only how long a written measure lasts.
+		expect(beatDurationMs(fourfold)).toBeCloseTo(beatDurationMs(once));
+	});
+
+	it("leaves the emphasis pattern a single bar long", () => {
+		// The pattern is the bar the metronome clicks, not the span a symbol covers.
+		const meta = parseSongMeta(
+			{tempo: 120, "time-signature": "4/4", "measures-per-symbol": 4}, defaults
+		)!;
+		expect(meta.pattern).toHaveLength(4);
 	});
 });

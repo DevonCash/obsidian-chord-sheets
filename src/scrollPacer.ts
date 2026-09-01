@@ -152,7 +152,7 @@ export class TempoScrollPacer implements ScrollPacer {
 		}
 
 		const entry = entries[index];
-		const entryBeats = entry.measures * this.timeline.beatsPerBar;
+		const entryBeats = entry.measures * this.timeline.beatsPerMeasure;
 		const progress = entryBeats > 0 ? (beat - entry.startBeat) / entryBeats : 0;
 
 		const from = offsets[index];

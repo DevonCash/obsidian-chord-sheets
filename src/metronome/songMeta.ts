@@ -46,6 +46,11 @@ export interface SongMeta {
 	beatUnit: number;
 	/** One entry per beat of a bar, always exactly beatsPerBar long. */
 	pattern: Beat[];
+	/**
+	 * How many measures of music each notated measure stands for. A sheet writing one symbol where the
+	 * song plays four bars of it sets this to 4, rather than repeating the symbol.
+	 */
+	measuresPerSymbol: number;
 }
 
 export interface SongMetaDefaults {
@@ -136,11 +141,13 @@ export function tempoUnitNotation(meta: Pick<SongMeta, "tempoUnit">): string {
 
 export const TEMPO_PROPERTY = "tempo";
 export const BEAT_UNIT_PROPERTY = "beat-unit";
+export const MEASURES_PER_SYMBOL_PROPERTY = "measures-per-symbol";
 export const TIME_SIGNATURE_PROPERTY = "time-signature";
 export const EMPHASIS_PROPERTY = "emphasis";
 
 export const MIN_TEMPO = 20;
 export const MAX_TEMPO = 400;
+export const MAX_MEASURES_PER_SYMBOL = 16;
 const MAX_BEATS_PER_BAR = 64;
 
 const TIME_SIGNATURE_PATTERN = /^\s*(\d+)\s*\/\s*(\d+)\s*$/;
@@ -232,14 +239,24 @@ export function parseSongMeta(
 	const pattern = parseEmphasis(frontmatter?.[EMPHASIS_PROPERTY], timeSignature.beatsPerBar)
 		?? defaultEmphasis(timeSignature.beatsPerBar, timeSignature.beatUnit);
 
+	const measuresPerSymbol = parseInt(asText(frontmatter?.[MEASURES_PER_SYMBOL_PROPERTY]) ?? "", 10);
+
 	return {
 		bpm: clamp(tempo, MIN_TEMPO, MAX_TEMPO),
+		measuresPerSymbol: isNaN(measuresPerSymbol)
+			? 1
+			: clamp(measuresPerSymbol, 1, MAX_MEASURES_PER_SYMBOL),
 		tempoUnit: parseTempoUnit(frontmatter?.[BEAT_UNIT_PROPERTY])
 			?? defaultTempoUnit(timeSignature.beatsPerBar, timeSignature.beatUnit),
 		beatsPerBar: timeSignature.beatsPerBar,
 		beatUnit: timeSignature.beatUnit,
 		pattern
 	};
+}
+
+/** Beats a single notated measure lasts, which is a whole bar per measure it stands for. */
+export function beatsPerMeasure(meta: Pick<SongMeta, "beatsPerBar" | "measuresPerSymbol">): number {
+	return meta.beatsPerBar * meta.measuresPerSymbol;
 }
 
 /**

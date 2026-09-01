@@ -4,6 +4,7 @@ import {TapTempo} from "./metronome/tapTempo";
 import {
 	Beat,
 	defaultEmphasis,
+	MAX_MEASURES_PER_SYMBOL,
 	MAX_TEMPO,
 	MIN_TEMPO,
 	parseEmphasis,
@@ -72,6 +73,22 @@ export class MetronomeModal extends Modal {
 		titleEl.setText("Metronome");
 
 		new Setting(contentEl)
+			.setName("Time signature")
+			.setDesc("Any signature, for example 4/4, 6/8, 7/8, 12/8 or 8/4.")
+			.addText(text => text
+				.setValue(timeSignatureToString(this.meta))
+				.onChange(value => {
+					const signature = parseTimeSignature(value);
+					text.inputEl.toggleClass("chord-sheet-invalid", !signature);
+					if (signature) {
+						this.apply({...signature, pattern: this.patternFor(signature)});
+						this.renderBeats();
+					}
+				})
+			);
+
+		// Labelled like the settings above it rather than as a heading, so the three read as one list.
+		new Setting(contentEl)
 			.setName("Tempo")
 			.setDesc("Beats per minute. Tap the button in time to set it by ear.")
 
@@ -116,21 +133,25 @@ export class MetronomeModal extends Modal {
 			});
 
 		new Setting(contentEl)
-			.setName("Time signature")
-			.setDesc("Any signature, for example 4/4, 6/8, 7/8, 12/8 or 8/4.")
-			.addText(text => text
-				.setValue(timeSignatureToString(this.meta))
-				.onChange(value => {
-					const signature = parseTimeSignature(value);
-					text.inputEl.toggleClass("chord-sheet-invalid", !signature);
-					if (signature) {
-						this.apply({...signature, pattern: this.patternFor(signature)});
-						this.renderBeats();
+			.setName("Measures per symbol")
+			.setDesc("How many measures each notated measure stands for. A sheet writing one symbol "
+				+ "where the song plays it for four bars sets this to 4.")
+			.addText(text => {
+				text.inputEl.type = "number";
+				text.inputEl.min = "1";
+				text.inputEl.max = String(MAX_MEASURES_PER_SYMBOL);
+				text.setValue(String(this.meta.measuresPerSymbol)).onChange(value => {
+					const measuresPerSymbol = parseInt(value, 10);
+					const valid = !isNaN(measuresPerSymbol)
+						&& measuresPerSymbol >= 1
+						&& measuresPerSymbol <= MAX_MEASURES_PER_SYMBOL;
+					text.inputEl.toggleClass("chord-sheet-invalid", !valid);
+					if (valid) {
+						this.apply({measuresPerSymbol});
 					}
-				})
-			);
+				});
+			});
 
-		// Labelled like the settings above it rather than as a heading, so the three read as one list.
 		new Setting(contentEl)
 			.setName("Emphasis")
 			.setDesc("Click a beat to step it through silent, normal and accented, and hear it.")

@@ -17,6 +17,7 @@ import {PLAYBACK_CHANGED_EVENT, PlaybackControl, SPEED_CHANGED_EVENT} from "./pl
 import {
 	BEAT_UNIT_PROPERTY,
 	EMPHASIS_PROPERTY,
+	MEASURES_PER_SYMBOL_PROPERTY,
 	MAX_TEMPO,
 	MIN_TEMPO,
 	parseSongMeta,
@@ -319,6 +320,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		this.registerMetadataType(AUTOSCROLL_SPEED_PROPERTY, "number");
 		this.registerMetadataType(TEMPO_PROPERTY, "number");
 		this.registerMetadataType(BEAT_UNIT_PROPERTY, "text");
+		this.registerMetadataType(MEASURES_PER_SYMBOL_PROPERTY, "number");
 		this.registerMetadataType(TIME_SIGNATURE_PROPERTY, "text");
 		this.registerMetadataType(EMPHASIS_PROPERTY, "text");
 	}
