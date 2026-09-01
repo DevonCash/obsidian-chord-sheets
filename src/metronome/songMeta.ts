@@ -108,6 +108,18 @@ export function parseTempoUnit(value: unknown): number | null {
 	return TEMPO_UNITS.find(unit => unit.notation === text)?.value ?? null;
 }
 
+/**
+ * How a tempo unit is offered in the interface: its name and the notation it is stored as, so the
+ * dropdown and the note's `beat-unit` property visibly say the same thing.
+ *
+ * The proper musical glyphs are not used: U+1D15D onwards covers every note value needed, but does not
+ * render in any font stack available here, and the glyphs that do render (U+2669 onwards) only cover
+ * quarters and eighths — half the list would be lettered and half not.
+ */
+export function tempoUnitLabel(unit: TempoUnit): string {
+	return `${unit.label} (${unit.notation})`;
+}
+
 /** How a tempo unit is written in the note's properties. */
 export function tempoUnitNotation(meta: Pick<SongMeta, "tempoUnit">): string {
 	return TEMPO_UNITS.find(unit => unit.value === meta.tempoUnit)?.notation ?? "1/4";

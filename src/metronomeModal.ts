@@ -9,9 +9,9 @@ import {
 	parseEmphasis,
 	parseTimeSignature,
 	patternToString,
-	parseTempoUnit,
 	SongMeta,
 	TEMPO_UNITS,
+	tempoUnitLabel,
 	tempoUnitNotation,
 	timeSignatureToString
 } from "./metronome/songMeta";
@@ -51,6 +51,7 @@ export class MetronomeModal extends Modal {
 	private beatsEl: HTMLElement | null = null;
 	private readoutEl: HTMLElement | null = null;
 	private tempoInput: TextComponent | null = null;
+	private tempoUnitButtons: HTMLElement[] = [];
 	private previewing = false;
 	private previewFrame: number | null = null;
 	private readonly tapTempo = new TapTempo();
@@ -72,19 +73,8 @@ export class MetronomeModal extends Modal {
 
 		new Setting(contentEl)
 			.setName("Tempo")
-			.setDesc("Beats per minute, and the note value a beat is. Tap the button in time to set the "
-				+ "tempo by ear.")
-			.addDropdown(dropdown => {
-				TEMPO_UNITS.forEach(unit => dropdown.addOption(unit.notation, unit.label));
-				dropdown
-					.setValue(tempoUnitNotation(this.meta))
-					.onChange(notation => {
-						const tempoUnit = parseTempoUnit(notation);
-						if (tempoUnit !== null) {
-							this.apply({tempoUnit});
-						}
-					});
-			})
+			.setDesc("Beats per minute. Tap the button in time to set it by ear.")
+
 			.addText(text => {
 				this.tempoInput = text;
 				text.inputEl.type = "number";
@@ -109,6 +99,29 @@ export class MetronomeModal extends Modal {
 					.onClick(() => this.tap(button.buttonEl));
 			});
 
+		// A row rather than a dropdown: eight fixed values, all worth seeing at once, and it matches the
+		// emphasis row below.
+		new Setting(contentEl)
+			.setName("Beat unit")
+			.setDesc("The note value a beat is. A compound meter is conventionally counted in dotted "
+				+ "notes, so 12/8 is four dotted quarters rather than twelve eighths.")
+			.then(setting => {
+				const rowEl = setting.controlEl.createDiv({cls: "chord-sheet-tempo-units"});
+				this.tempoUnitButtons = TEMPO_UNITS.map(unit => {
+					const button = rowEl.createEl("button", {
+						cls: "chord-sheet-tempo-unit",
+						text: unit.notation
+					});
+					setTooltip(button, tempoUnitLabel(unit));
+					button.addEventListener("click", () => {
+						this.apply({tempoUnit: unit.value});
+						this.renderTempoUnits();
+					});
+					return button;
+				});
+				this.renderTempoUnits();
+			});
+
 		new Setting(contentEl)
 			.setName("Time signature")
 			.setDesc("Any signature, for example 4/4, 6/8, 7/8, 12/8 or 8/4.")
@@ -120,6 +133,7 @@ export class MetronomeModal extends Modal {
 					if (signature) {
 						this.apply({...signature, pattern: this.patternFor(signature)});
 						this.renderBeats();
+						this.renderTempoUnits();
 					}
 				})
 			);
@@ -184,6 +198,13 @@ export class MetronomeModal extends Modal {
 		}
 		Array.from(this.readoutEl?.children ?? [])
 			.forEach(beatEl => beatEl.removeClass("is-playing"));
+	}
+
+	private renderTempoUnits() {
+		const selected = tempoUnitNotation(this.meta);
+		this.tempoUnitButtons.forEach((button, index) =>
+			button.toggleClass("is-selected", TEMPO_UNITS[index].notation === selected)
+		);
 	}
 
 	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */
