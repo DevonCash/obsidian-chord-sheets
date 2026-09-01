@@ -7,8 +7,14 @@
 
 import {MAX_TEMPO, MIN_TEMPO} from "./songMeta";
 
-/** Taps further apart than this start a new measurement rather than extending the last one. */
-const RESTART_AFTER_MS = 2000;
+/**
+ * Taps further apart than this start a new measurement rather than extending the last one.
+ *
+ * Derived from the slowest tempo allowed, with room to spare, so that every tempo in range can actually
+ * be tapped. A fixed window cannot: a beat unit of a dotted half or a whole note is several seconds
+ * long, and taps that far apart would restart the measurement every time.
+ */
+const RESTART_AFTER_MS = (60000 / MIN_TEMPO) * 1.25;
 /** Only the most recent taps are averaged, so speeding up or slowing down is followed. */
 const MAX_TAPS = 8;
 

@@ -1,5 +1,5 @@
 import {TapTempo} from "../src/metronome/tapTempo";
-import {MAX_TEMPO, MIN_TEMPO} from "../src/metronome/songMeta";
+import {barDurationMs, MAX_TEMPO, MIN_TEMPO, parseSongMeta} from "../src/metronome/songMeta";
 
 /** Taps at a steady interval, returning the tempo after the last one. */
 function tapAt(tapTempo: TapTempo, intervalMs: number, times: number, from = 1000) {
@@ -59,16 +59,38 @@ describe("TapTempo", () => {
 		expect(tapAt(new TapTempo(), 10, 4)).toBe(MAX_TEMPO);
 	});
 
-	it("cannot be tapped slower than the restart window allows", () => {
-		// Taps far enough apart to read as a very slow tempo restart the measurement instead, so the
-		// slowest reachable tempo is set by the restart window rather than by the lower tempo limit.
+	it("can be tapped anywhere in the usable tempo range", () => {
+		// A slow beat unit — a dotted half, a whole note — has seconds between beats, and has to be
+		// tappable at that speed rather than restarting the measurement on every tap.
+		for (const bpm of [MIN_TEMPO, 30, 40, 60, 120, 240]) {
+			expect(tapAt(new TapTempo(), 60000 / bpm, 4)).toBe(bpm);
+		}
+	});
+
+	it("still restarts when the taps stop being a tempo at all", () => {
+		// Slower than anything in range: a new measurement, not a very slow one.
 		expect(tapAt(new TapTempo(), 10000, 2)).toBeNull();
-		expect(tapAt(new TapTempo(), 1900, 2)).toBeGreaterThan(MIN_TEMPO);
 	});
 
 	it("ignores taps landing at the same instant, which have no interval", () => {
 		const tapTempo = new TapTempo();
 		expect(tapAt(tapTempo, 0, 3)).toBeNull();
+	});
+
+	it.each([
+		// Tap a beat, and a bar lasts however many of those beats it holds.
+		["4/4", 750, 3000],    // 4 quarters
+		["12/8", 750, 3000],   // 4 dotted quarters, not 12 eighths
+		["6/8", 750, 1500],    // 2 dotted quarters
+		["3/4", 500, 1500],    // 3 quarters
+		["2/2", 1000, 2000],   // 2 half notes
+	])("in %s, tapping every %ims makes a bar last %ims", (timeSignature, interval, expected) => {
+		const bpm = tapAt(new TapTempo(), interval, 4)!;
+		const meta = parseSongMeta(
+			{tempo: bpm, "time-signature": timeSignature},
+			{tempo: 100, timeSignature: "4/4"}
+		)!;
+		expect(barDurationMs(meta)).toBeCloseTo(expected);
 	});
 
 	it("forgets its taps when reset", () => {
