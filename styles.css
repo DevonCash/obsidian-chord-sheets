@@ -1009,37 +1009,6 @@ svg.enharmonic-toggle {
 
 /* Metronome dialog */
 /* Wide enough for either label, so these buttons do not resize as their labels change. */
-/* The note value a beat is: one button per value, shown as the notation the property stores. */
-.chord-sheet-tempo-units {
-	display: flex;
-	gap: var(--size-2-2);
-	flex-wrap: wrap;
-}
-
-button.chord-sheet-tempo-unit {
-	min-width: 3.2rem;
-	padding: var(--size-2-2) var(--size-4-2);
-	box-shadow: none;
-	border: 2px solid var(--background-modifier-border);
-	border-radius: var(--radius-s);
-	background-color: transparent;
-	color: var(--text-muted);
-	font-variant-numeric: tabular-nums;
-	cursor: pointer;
-}
-
-button.chord-sheet-tempo-unit:hover {
-	color: var(--text-normal);
-	background-color: var(--background-modifier-hover);
-}
-
-button.chord-sheet-tempo-unit.is-selected {
-	border-color: var(--chord-sheet-transport-active-color, var(--text-accent));
-	background-color: var(--chord-sheet-transport-active-color, var(--text-accent));
-	color: var(--text-on-accent);
-	font-weight: var(--font-bold);
-}
-
 button.chord-sheet-tap-tempo {
 	min-width: 7rem;
 }
