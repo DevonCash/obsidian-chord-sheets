@@ -14,7 +14,7 @@ import {MAX_TEMPO, MIN_TEMPO} from "./songMeta";
  * be tapped. A fixed window cannot: a beat unit of a dotted half or a whole note is several seconds
  * long, and taps that far apart would restart the measurement every time.
  */
-const RESTART_AFTER_MS = (60000 / MIN_TEMPO) * 1.25;
+export const RESTART_AFTER_MS = (60000 / MIN_TEMPO) * 1.25;
 /** Only the most recent taps are averaged, so speeding up or slowing down is followed. */
 const MAX_TAPS = 8;
 

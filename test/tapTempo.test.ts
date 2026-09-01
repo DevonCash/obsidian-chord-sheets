@@ -1,4 +1,4 @@
-import {TapTempo} from "../src/metronome/tapTempo";
+import {RESTART_AFTER_MS, TapTempo} from "../src/metronome/tapTempo";
 import {
 	barDurationMs,
 	MAX_TEMPO,
@@ -97,6 +97,21 @@ describe("TapTempo", () => {
 			{tempo: 100, timeSignature: "4/4"}
 		)!;
 		expect(barDurationMs(meta)).toBeCloseTo(expected);
+	});
+
+	it("restarts on exactly the window the dialog clears its count after", () => {
+		// The dialog puts the button back to a standing start after RESTART_AFTER_MS. If that were not
+		// the same window the measurement restarts on, the count on screen and the taps being averaged
+		// would disagree — a count of one over a measurement still holding several.
+		const within = new TapTempo();
+		within.tap(0);
+		within.tap(RESTART_AFTER_MS - 1);
+		expect(within.count).toBe(2);
+
+		const beyond = new TapTempo();
+		beyond.tap(0);
+		beyond.tap(RESTART_AFTER_MS + 1);
+		expect(beyond.count).toBe(1);
 	});
 
 	it("forgets its taps when reset", () => {

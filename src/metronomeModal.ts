@@ -1,5 +1,5 @@
 import {App, Modal, Setting, setTooltip, TextComponent} from "obsidian";
-import {TapTempo} from "./metronome/tapTempo";
+import {RESTART_AFTER_MS, TapTempo} from "./metronome/tapTempo";
 
 import {
 	Beat,
@@ -57,6 +57,7 @@ export class MetronomeModal extends Modal {
 	private previewing = false;
 	private previewFrame: number | null = null;
 	private readonly tapTempo = new TapTempo();
+	private tapLapseId: number | null = null;
 
 	constructor(
 		app: App,
@@ -176,7 +177,27 @@ export class MetronomeModal extends Modal {
 		this.patternPreview.stop();
 		this.stopFollowingBeat();
 		this.previewing = false;
+		if (this.tapLapseId !== null) {
+			window.clearTimeout(this.tapLapseId);
+			this.tapLapseId = null;
+		}
 		this.contentEl.empty();
+	}
+
+	/**
+	 * Puts the button back to a standing start once the taps stop for long enough to have been a
+	 * measurement of their own. The next tap would begin again regardless; this says so rather than
+	 * leaving a stale count sitting there until it is pressed.
+	 */
+	private clearWhenTappingStops(buttonEl: HTMLElement) {
+		if (this.tapLapseId !== null) {
+			window.clearTimeout(this.tapLapseId);
+		}
+		this.tapLapseId = window.setTimeout(() => {
+			this.tapLapseId = null;
+			this.tapTempo.reset();
+			buttonEl.setText("Tap");
+		}, RESTART_AFTER_MS);
 	}
 
 	private async togglePreview(buttonEl: HTMLElement) {
@@ -223,6 +244,7 @@ export class MetronomeModal extends Modal {
 		// comes out a clean fraction of what was tapped means taps went missing, not that the average
 		// was off.
 		buttonEl.setText(`Tap (${this.tapTempo.count})`);
+		this.clearWhenTappingStops(buttonEl);
 		if (bpm === null) {
 			return;
 		}
