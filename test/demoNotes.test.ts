@@ -59,11 +59,18 @@ describe("demo vault notes", () => {
 		expect(meta!.pattern.filter(beat => beat === "accent")).toHaveLength(1);
 	});
 
-	it("02 written conventionally runs at the same speed as counting eighths would", () => {
+	it("02 runs at the speed the note says counting eighths would", () => {
 		// A dotted quarter of 60 is three eighths of 180; the demo says so, so it had better be true.
 		const {meta} = loadNote("02 - 12-8 compound.md");
-		const countingEighths = parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!;
+		const countingEighths = parseSongMeta(
+			{tempo: 180, "time-signature": "12/8", "beat-unit": "1/8"}, defaults
+		)!;
 		expect(beatDurationMs(meta!)).toBeCloseTo(beatDurationMs(countingEighths));
+	});
+
+	it("02 needs no beat-unit property, as the demo claims", () => {
+		const {text} = loadNote("02 - 12-8 compound.md");
+		expect(text).not.toMatch(/^beat-unit:/m);
 	});
 
 	it("02 gives Em three pulses of its bar and Am the last", () => {

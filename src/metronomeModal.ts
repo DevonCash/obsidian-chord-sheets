@@ -101,8 +101,8 @@ export class MetronomeModal extends Modal {
 
 		new Setting(contentEl)
 			.setName("Beat unit")
-			.setDesc("The note value a beat is. A compound meter is conventionally counted in dotted "
-				+ "notes, so 12/8 is four dotted quarters rather than twelve eighths.")
+			.setDesc("The note value a beat is. A compound meter is counted in dotted notes by default, "
+				+ "so 12/8 is four dotted quarters rather than twelve eighths.")
 			.addDropdown(dropdown => {
 				TEMPO_UNITS.forEach(unit => dropdown.addOption(unit.notation, tempoUnitLabel(unit)));
 				dropdown

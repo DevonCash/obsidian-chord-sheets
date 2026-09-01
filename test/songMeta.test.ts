@@ -140,8 +140,9 @@ describe("parseSongMeta", () => {
 });
 
 describe("beat and bar durations", () => {
-	it("counts the time signature denominator, so 12/8 at 180 and 8/4 at 120 both give a 4s bar", () => {
-		const twelveEight = parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!;
+	it("gives a 4s bar for 12/8 at 60 and 8/4 at 120, each counted its own way", () => {
+		// 12/8 counts dotted quarters, four to the bar; 8/4 counts quarters, eight to the bar.
+		const twelveEight = parseSongMeta({tempo: 60, "time-signature": "12/8"}, defaults)!;
 		const eightFour = parseSongMeta({tempo: 120, "time-signature": "8/4"}, defaults)!;
 
 		expect(beatDurationMs(twelveEight)).toBeCloseTo(1000 / 3);
@@ -152,10 +153,28 @@ describe("beat and bar durations", () => {
 });
 
 describe("the note value the tempo counts", () => {
-	it("is the time signature's own note value when the property is absent", () => {
+	it("is a simple meter's own note value when the property is absent", () => {
 		expect(parseSongMeta({tempo: 120, "time-signature": "4/4"}, defaults)!.tempoUnit).toBe(1 / 4);
-		expect(parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!.tempoUnit).toBe(1 / 8);
 		expect(parseSongMeta({tempo: 100, "time-signature": "2/2"}, defaults)!.tempoUnit).toBe(1 / 2);
+		expect(parseSongMeta({tempo: 100, "time-signature": "3/8"}, defaults)!.tempoUnit).toBe(1 / 8);
+	});
+
+	it("is the dotted note for a compound meter, which is how its tempo is written", () => {
+		// 12/8 is counted in dotted quarters, matching the four pulses its default emphasis clicks.
+		expect(parseSongMeta({tempo: 60, "time-signature": "12/8"}, defaults)!.tempoUnit).toBe(3 / 8);
+		expect(parseSongMeta({tempo: 80, "time-signature": "6/8"}, defaults)!.tempoUnit).toBe(3 / 8);
+		expect(parseSongMeta({tempo: 80, "time-signature": "9/8"}, defaults)!.tempoUnit).toBe(3 / 8);
+		expect(parseSongMeta({tempo: 80, "time-signature": "6/16"}, defaults)!.tempoUnit).toBe(3 / 16);
+	});
+
+	it("counts one tempo beat per pulse its emphasis clicks", () => {
+		// The two defaults have to agree about what a beat is, or the click would not land on the count.
+		for (const signature of ["4/4", "3/4", "6/8", "9/8", "12/8", "2/2", "6/16"]) {
+			const meta = parseSongMeta({tempo: 100, "time-signature": signature}, defaults)!;
+			const audible = meta.pattern.filter(beat => beat !== "silent").length;
+			const tempoBeatsPerBar = barDurationMs(meta) / (60000 / meta.bpm);
+			expect(tempoBeatsPerBar).toBeCloseTo(audible);
+		}
 	});
 
 	it.each([
@@ -181,10 +200,10 @@ describe("the note value the tempo counts", () => {
 
 	it("lets a compound meter be given its conventional tempo", () => {
 		// The same music, written the two ways: a dotted quarter of 60 is three eighths of 180.
-		const conventional = parseSongMeta(
-			{tempo: 60, "time-signature": "12/8", "beat-unit": "3/8"}, defaults
+		const conventional = parseSongMeta({tempo: 60, "time-signature": "12/8"}, defaults)!;
+		const literal = parseSongMeta(
+			{tempo: 180, "time-signature": "12/8", "beat-unit": "1/8"}, defaults
 		)!;
-		const literal = parseSongMeta({tempo: 180, "time-signature": "12/8"}, defaults)!;
 
 		expect(beatDurationMs(conventional)).toBeCloseTo(beatDurationMs(literal));
 		expect(barDurationMs(conventional)).toBeCloseTo(4000);
@@ -205,9 +224,11 @@ describe("the note value the tempo counts", () => {
 		expect(beatDurationMs(after)).toBeCloseTo(625);
 	});
 
-	it("falls back to the signature's note value when the property is malformed", () => {
-		const meta = parseSongMeta({tempo: 120, "time-signature": "4/4", "beat-unit": "nonsense"}, defaults)!;
-		expect(meta.tempoUnit).toBe(1 / 4);
+	it("falls back to how the meter is counted when the property is malformed", () => {
+		expect(parseSongMeta({tempo: 120, "time-signature": "4/4", "beat-unit": "nonsense"}, defaults)!
+			.tempoUnit).toBe(1 / 4);
+		expect(parseSongMeta({tempo: 60, "time-signature": "12/8", "beat-unit": "nonsense"}, defaults)!
+			.tempoUnit).toBe(3 / 8);
 	});
 });
 

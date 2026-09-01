@@ -366,7 +366,7 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 			createEl("code", {text: "1/4"}),
 			` or `,
 			createEl("code", {text: "3/8"}),
-			` for a dotted quarter; defaults to the time signature's own note value), `,
+			` for a dotted quarter; a compound meter is counted in dotted notes by default), `,
 			createEl("code", {text: "time-signature"}),
 			` (any signature, e.g. `,
 			createEl("code", {text: "4/4"}),

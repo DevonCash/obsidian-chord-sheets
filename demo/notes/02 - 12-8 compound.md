@@ -1,6 +1,5 @@
 ---
 tempo: 60
-beat-unit: 3/8
 time-signature: 12/8
 emphasis: X__x__x__x__
 ---
@@ -8,8 +7,10 @@ emphasis: X__x__x__x__
 A dotted quarter at 60, which is how a 12/8 tempo is normally written: four
 pulses to the bar, one a second, so a bar lasts 4 seconds.
 
-Without `beat-unit` the tempo would count the time signature's own note value
-instead — the same music would read as 180 eighth notes per minute.
+No `beat-unit` property is needed — a compound meter is counted in dotted notes
+by default, which is also what its emphasis clicks. Set it explicitly to count
+some other note value: `beat-unit: 1/8` here would read the same music as 180
+eighth notes per minute.
 
 The emphasis pattern is what keeps this from machine-gunning: twelve beats per
 bar, but only beats 1, 4, 7 and 10 sound — the four dotted-quarter pulses, with

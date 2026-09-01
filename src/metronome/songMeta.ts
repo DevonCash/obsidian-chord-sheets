@@ -82,6 +82,15 @@ function isCompound(beatsPerBar: number, beatUnit: number): boolean {
 }
 
 /**
+ * The note value a beat is when the note does not say. A compound meter is counted in dotted notes —
+ * 12/8 in dotted quarters, not eighths — which is both how its tempo is conventionally written and what
+ * its default emphasis clicks.
+ */
+export function defaultTempoUnit(beatsPerBar: number, beatUnit: number): number {
+	return isCompound(beatsPerBar, beatUnit) ? 3 / beatUnit : 1 / beatUnit;
+}
+
+/**
  * How a time signature is counted when the note does not say: from the table where it is listed, and
  * otherwise from its shape — groups of three for a compound meter, every beat for anything else.
  */
@@ -225,9 +234,8 @@ export function parseSongMeta(
 
 	return {
 		bpm: clamp(tempo, MIN_TEMPO, MAX_TEMPO),
-		// Absent, the tempo counts the time signature's own note value, as it did before this was
-		// configurable: 4/4 counts quarters, 12/8 counts eighths.
-		tempoUnit: parseTempoUnit(frontmatter?.[BEAT_UNIT_PROPERTY]) ?? 1 / timeSignature.beatUnit,
+		tempoUnit: parseTempoUnit(frontmatter?.[BEAT_UNIT_PROPERTY])
+			?? defaultTempoUnit(timeSignature.beatsPerBar, timeSignature.beatUnit),
 		beatsPerBar: timeSignature.beatsPerBar,
 		beatUnit: timeSignature.beatUnit,
 		pattern
