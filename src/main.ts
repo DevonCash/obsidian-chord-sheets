@@ -1,6 +1,6 @@
 // noinspection JSUnusedGlobalSymbols
 
-import {addIcon, debounce, Editor, MarkdownFileInfo, MarkdownView, Notice, Plugin, TFile, View} from 'obsidian';
+import {addIcon, debounce, Editor, MarkdownFileInfo, MarkdownView, Notice, Plugin, setTooltip, TFile, View} from 'obsidian';
 import {EditorView, ViewPlugin} from "@codemirror/view";
 import {ChordBlockPostProcessorView} from "./chordBlockPostProcessorView";
 import {ChordSheetsSettings, DEFAULT_SETTINGS, ShowAutoscrollButtonSetting} from "./chordSheetsSettings";
@@ -52,6 +52,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		await this.loadSettings();
 		this.app.workspace.trigger("parse-style-settings");
 		addIcon("enharmonic-toggle", enharmonicToggleIcon);
+		addIcon("chord-sheet-metronome", metronomeIcon);
 
 		// Register code block post processor for reading mode
 
@@ -533,8 +534,9 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		const controlsVisible = playbackControl?.isControlVisible ?? false;
 		this.updateActionButton(
 			view, ".chord-sheet-autoscroll-action", this.settings.showAutoscrollButton, hasChordBlocks,
-			controlsVisible ? "music" : "play-circle",
+			"chord-sheet-metronome",
 			controlsVisible ? "Hide playback controls" : "Show playback controls",
+			controlsVisible,
 			() => this.togglePlaybackControls(view)
 		);
 
@@ -547,6 +549,7 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		hasChordBlocks: boolean,
 		icon: string,
 		tooltip: string,
+		active: boolean,
 		onClick: () => void
 	) {
 		const existingEl: HTMLElement | null = view.containerEl.querySelector(cls);
@@ -557,12 +560,18 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 			return;
 		}
 
-		if (!existingEl || icon !== existingEl.dataset.icon) {
-			existingEl?.remove();
-			const viewEl = view.addAction(icon, tooltip, onClick);
+		let viewEl = existingEl;
+		if (!viewEl || icon !== viewEl.dataset.icon) {
+			viewEl?.remove();
+			viewEl = view.addAction(icon, tooltip, onClick);
 			viewEl.addClass(cls.substring(1));
 			viewEl.dataset.icon = icon;
 		}
+
+		// The icon stays the same whether the controls are up or not, so the tooltip and the active
+		// styling are what tell the two apart, on whichever button is already there.
+		setTooltip(viewEl, tooltip);
+		viewEl.toggleClass("is-active", active);
 	}
 
 	private getAutoscrollSpeedFromFrontmatter(file: TFile | null): number | null {
@@ -718,6 +727,15 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		await this.saveData(this.settings);
 	}
 }
+
+/** Lucide's metronome (ISC), scaled from its 24x24 grid to the 100x100 box addIcon draws in. */
+const metronomeIcon = `<g transform="scale(4.1667)" fill="none" stroke="currentColor"
+    stroke-linecap="round" stroke-linejoin="round" style="stroke-width:2">
+    <path d="M12 11.4V9.1"/>
+    <path d="m12 17 6.59-6.59"/>
+    <path d="m15.05 5.7-.218-.691a3 3 0 0 0-5.663 0L4.418 19.695A1 1 0 0 0 5.37 21h13.253a1 1 0 0 0 .951-1.31L18.45 16.2"/>
+    <circle cx="20" cy="9" r="2"/>
+</g>`;
 
 const enharmonicToggleIcon = `<g>
     <path d="m 67.938374,81.624479 c 2.039181,-1.006678 3.932707,-2.348915 5.971893,-3.556933 3.058768,-2.147583 6.263191,-4.160945 8.884993,-6.84542 C 84.615959,69.4101 86.21817,66.926959 86.145346,63.8398 86.072466,60.551317 83.96051,58.068173 81.70285,56.725929 78.279936,54.645461 74.128749,54.444121 70.123215,56.323277" style="stroke-width:7.75711"/>
