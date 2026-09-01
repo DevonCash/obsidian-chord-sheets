@@ -216,9 +216,10 @@ export class MetronomeModal extends Modal {
 	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */
 	private tap(buttonEl: HTMLElement) {
 		const bpm = this.tapTempo.tap(performance.now());
-		// The tempo field is what shows the result, so the button only says whether it has enough to
-		// work from yet.
-		buttonEl.setText(bpm === null ? "Tap again" : "Tap");
+		// The count is shown because it is the one thing a wrong reading cannot tell you: a tempo that
+		// comes out a clean fraction of what was tapped means taps went missing, not that the average
+		// was off.
+		buttonEl.setText(`Tap (${this.tapTempo.count})`);
 		if (bpm === null) {
 			return;
 		}

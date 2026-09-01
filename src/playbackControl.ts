@@ -142,9 +142,16 @@ export class PlaybackControl extends Component {
 		if (songMetaEquals(this._songMeta, songMeta)) {
 			return;
 		}
+		// The timeline depends on the bar's length, not the tempo, so a tempo change — a tap, a nudge —
+		// does not have to reparse the document to find the measures again.
+		const measuresChanged = !this._songMeta || !songMeta
+			|| beatsPerMeasure(this._songMeta) !== beatsPerMeasure(songMeta);
+
 		this._songMeta = songMeta;
 		this.transport.setSongMeta(songMeta ?? defaultSongMeta(this.settings));
-		this.pacer = this.createPacer();
+		if (measuresChanged) {
+			this.pacer = this.createPacer();
+		}
 		this.control?.setSongMeta(songMeta);
 	}
 
