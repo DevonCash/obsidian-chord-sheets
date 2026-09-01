@@ -1,6 +1,21 @@
 import {App, Modal, Setting, setTooltip, TextComponent} from "obsidian";
 import {TapTempo} from "./metronome/tapTempo";
 
+import {
+	Beat,
+	defaultEmphasis,
+	MAX_TEMPO,
+	MIN_TEMPO,
+	parseEmphasis,
+	parseTimeSignature,
+	patternToString,
+	parseTempoUnit,
+	SongMeta,
+	TEMPO_UNITS,
+	tempoUnitNotation,
+	timeSignatureToString
+} from "./metronome/songMeta";
+
 /** Looping the pattern while it is being set, without the song running behind it. */
 export interface PatternPreview {
 	start: () => Promise<void>;
@@ -8,20 +23,6 @@ export interface PatternPreview {
 	/** Which beat of the bar is sounding, or null when the preview is not running. */
 	beatInBar: () => number | null;
 }
-import {
-	Beat,
-	MAX_TEMPO,
-	MIN_TEMPO,
-	parseEmphasis,
-	parseTimeSignature,
-	patternToString,
-	SongMeta,
-	TEMPO_UNITS,
-	timeSignatureToString,
-	parseTempoUnit,
-	tempoUnitNotation
-} from "./metronome/songMeta";
-
 /**
  * Clicking a beat steps it through the three states, building up from silence: a beat is given a click,
  * then an accent, then taken away again.
@@ -117,11 +118,7 @@ export class MetronomeModal extends Modal {
 					const signature = parseTimeSignature(value);
 					text.inputEl.toggleClass("chord-sheet-invalid", !signature);
 					if (signature) {
-						// A change of meter resizes the bar, so the pattern is refitted to it.
-						this.apply({
-							...signature,
-							pattern: parseEmphasis(patternToString(this.meta), signature.beatsPerBar)!
-						});
+						this.apply({...signature, pattern: this.patternFor(signature)});
 						this.renderBeats();
 					}
 				})
@@ -202,6 +199,22 @@ export class MetronomeModal extends Modal {
 		this.tempoInput?.setValue(String(bpm));
 		this.tempoInput?.inputEl.removeClass("chord-sheet-invalid");
 		this.apply({bpm});
+	}
+
+	/**
+	 * The pattern to carry into a new meter. A pattern left as the old meter was counted follows to how
+	 * the new one is counted, so changing 4/4 to 12/8 gives four pulses rather than twelve clicks. One
+	 * that has been edited is kept and refitted instead, since it was set deliberately.
+	 */
+	private patternFor(signature: {beatsPerBar: number, beatUnit: number}): Beat[] {
+		const current = patternToString(this.meta);
+		const wasDefault = current === patternToString({
+			pattern: defaultEmphasis(this.meta.beatsPerBar, this.meta.beatUnit)
+		});
+
+		return wasDefault
+			? defaultEmphasis(signature.beatsPerBar, signature.beatUnit)
+			: parseEmphasis(current, signature.beatsPerBar)!;
 	}
 
 	private apply(changes: Partial<SongMeta>) {

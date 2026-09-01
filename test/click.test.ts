@@ -53,7 +53,7 @@ class StubAudioContext {
 	close() { return Promise.resolve(); }
 }
 
-const defaults = {tempo: 100, timeSignature: "4/4", emphasis: "X"};
+const defaults = {tempo: 100, timeSignature: "4/4"};
 
 // The click uses window timers on purpose, for popout window compatibility. The scheduler is driven by
 // hand here, so the timer only needs to exist.

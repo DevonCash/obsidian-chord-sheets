@@ -19,7 +19,7 @@ import {tokenizeLine} from "../src/sheet-parsing/tokenizeLine";
 
 const NOTES_DIR = path.join(__dirname, "..", "demo", "notes");
 const markers = {chordLineMarker: "%c", textLineMarker: "%t"};
-const defaults = {tempo: 100, timeSignature: "4/4", emphasis: "X"};
+const defaults = {tempo: 100, timeSignature: "4/4"};
 
 function loadNote(name: string): {text: string, meta: SongMeta | null, timeline: SongTimeline | null} {
 	const text = fs.readFileSync(path.join(NOTES_DIR, name), "utf8");

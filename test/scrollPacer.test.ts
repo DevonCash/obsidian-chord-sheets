@@ -9,7 +9,7 @@ const markers = {
 	chordLineMarker: DEFAULT_CHORD_LINE_MARKER,
 	textLineMarker: DEFAULT_TEXT_LINE_MARKER
 };
-const defaults = {tempo: 100, timeSignature: "4/4", emphasis: "X"};
+const defaults = {tempo: 100, timeSignature: "4/4"};
 
 /** A scroll container of a fixed height that reports whatever scrollTop it was last given. */
 function fakeScrollElem(clientHeight = 600, scrollHeight = 100000): HTMLElement {

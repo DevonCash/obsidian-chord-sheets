@@ -51,7 +51,52 @@ export interface SongMeta {
 export interface SongMetaDefaults {
 	tempo: number;
 	timeSignature: string;
-	emphasis: string;
+}
+
+/**
+ * How each time signature is counted when a note does not say. Written the way the property is: X accent,
+ * x normal, _ silent.
+ *
+ * Simple meters accent the downbeat and click every beat. Compound meters click only their pulses —
+ * 6/8 is two dotted quarters, not six eighths — and irregular meters follow their usual grouping.
+ */
+const DEFAULT_EMPHASIS: Record<string, string> = {
+	"2/4": "Xx",
+	"3/4": "Xxx",
+	"4/4": "Xxxx",
+	"5/4": "X__x_",          // 3+2
+	"2/2": "Xx",
+	"3/2": "Xxx",
+	"4/2": "Xxxx",
+	"3/8": "Xxx",
+	"5/8": "X__x_",          // 3+2
+	"6/8": "X__x__",         // 2 dotted quarters
+	"7/8": "X_x_x__",        // 2+2+3
+	"9/8": "X__x__x__",      // 3 dotted quarters
+	"12/8": "X__x__x__x__"   // 4 dotted quarters
+};
+
+/** A meter of threes on a short note value is compound: it is counted in groups of three. */
+function isCompound(beatsPerBar: number, beatUnit: number): boolean {
+	return beatUnit >= 8 && beatsPerBar >= 6 && beatsPerBar % 3 === 0;
+}
+
+/**
+ * How a time signature is counted when the note does not say: from the table where it is listed, and
+ * otherwise from its shape — groups of three for a compound meter, every beat for anything else.
+ */
+export function defaultEmphasis(beatsPerBar: number, beatUnit: number): Beat[] {
+	const listed = DEFAULT_EMPHASIS[`${beatsPerBar}/${beatUnit}`];
+	if (listed) {
+		return parseEmphasis(listed, beatsPerBar)!;
+	}
+
+	const pattern: Beat[] = [];
+	for (let beat = 0; beat < beatsPerBar; beat++) {
+		const startsGroup = isCompound(beatsPerBar, beatUnit) ? beat % 3 === 0 : true;
+		pattern.push(beat === 0 ? "accent" : startsGroup ? "normal" : "silent");
+	}
+	return pattern;
 }
 
 /**
@@ -164,8 +209,7 @@ export function parseSongMeta(
 		?? {beatsPerBar: 4, beatUnit: 4};
 
 	const pattern = parseEmphasis(frontmatter?.[EMPHASIS_PROPERTY], timeSignature.beatsPerBar)
-		?? parseEmphasis(defaults.emphasis, timeSignature.beatsPerBar)
-		?? parseEmphasis("X", timeSignature.beatsPerBar)!;
+		?? defaultEmphasis(timeSignature.beatsPerBar, timeSignature.beatUnit);
 
 	return {
 		bpm: clamp(tempo, MIN_TEMPO, MAX_TEMPO),

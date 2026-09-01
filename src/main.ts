@@ -581,7 +581,6 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 		return parseSongMeta(this.app.metadataCache.getFileCache(file)?.frontmatter, {
 			tempo: this.settings.defaultTempo,
 			timeSignature: this.settings.defaultTimeSignature,
-			emphasis: this.settings.defaultEmphasis
 		});
 	}
 

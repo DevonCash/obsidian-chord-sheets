@@ -1,6 +1,7 @@
 import {
 	barDurationMs,
 	beatDurationMs,
+	defaultEmphasis,
 	parseTempoUnit,
 	tempoUnitNotation,
 	TEMPO_UNITS,
@@ -12,7 +13,7 @@ import {
 	timeSignatureToString
 } from "../src/metronome/songMeta";
 
-const defaults: SongMetaDefaults = {tempo: 100, timeSignature: "4/4", emphasis: "X"};
+const defaults: SongMetaDefaults = {tempo: 100, timeSignature: "4/4"};
 
 describe("parseTimeSignature", () => {
 	it.each([
@@ -123,11 +124,11 @@ describe("parseSongMeta", () => {
 		expect(timeSignatureToString(meta)).toBe("4/4");
 	});
 
-	it("falls back to the default emphasis when the value is malformed, sized to the meter", () => {
+	it("falls back to how the meter is conventionally counted when the value is malformed", () => {
 		const meta = parseSongMeta(
 			{tempo: 100, "time-signature": "12/8", emphasis: "1,4,7,10"}, defaults
 		)!;
-		expect(patternToString(meta)).toBe("Xxxxxxxxxxxx");
+		expect(patternToString(meta)).toBe("X__x__x__x__");
 	});
 
 	it("always produces a pattern exactly one bar long", () => {
@@ -207,5 +208,75 @@ describe("the note value the tempo counts", () => {
 	it("falls back to the signature's note value when the property is malformed", () => {
 		const meta = parseSongMeta({tempo: 120, "time-signature": "4/4", "beat-unit": "nonsense"}, defaults)!;
 		expect(meta.tempoUnit).toBe(1 / 4);
+	});
+});
+
+describe("how a meter is counted when the note does not say", () => {
+	const emphasisFor = (signature: string) => {
+		const [beatsPerBar, beatUnit] = signature.split("/").map(Number);
+		return patternToString({pattern: defaultEmphasis(beatsPerBar, beatUnit)});
+	};
+
+	describe("simple meters click every beat, accenting the first", () => {
+		it.each([
+			["2/4", "Xx"],
+			["3/4", "Xxx"],
+			["4/4", "Xxxx"],
+			["2/2", "Xx"],
+			["3/2", "Xxx"],
+			["3/8", "Xxx"],
+		])("counts %s as %s", (signature, expected) => {
+			expect(emphasisFor(signature)).toBe(expected);
+		});
+	});
+
+	describe("compound meters click their pulses, not every subdivision", () => {
+		it.each([
+			["6/8", "X__x__"],
+			["9/8", "X__x__x__"],
+			["12/8", "X__x__x__x__"],
+		])("counts %s as %s", (signature, expected) => {
+			expect(emphasisFor(signature)).toBe(expected);
+		});
+
+		it("derives the same shape for a meter not in the table", () => {
+			// 12/16 is not listed, but is compound and so groups in threes like 12/8 does.
+			expect(emphasisFor("12/16")).toBe("X__x__x__x__");
+			expect(emphasisFor("6/16")).toBe("X__x__");
+		});
+
+		it("sounds one click per group of three", () => {
+			for (const signature of ["6/8", "9/8", "12/8", "6/16"]) {
+				const [beatsPerBar] = signature.split("/").map(Number);
+				const audible = emphasisFor(signature).split("").filter(c => c !== "_").length;
+				expect(audible).toBe(beatsPerBar / 3);
+			}
+		});
+	});
+
+	describe("irregular meters follow their usual grouping", () => {
+		it.each([
+			["5/4", "X__x_"],
+			["5/8", "X__x_"],
+			["7/8", "X_x_x__"],
+		])("counts %s as %s", (signature, expected) => {
+			expect(emphasisFor(signature)).toBe(expected);
+		});
+
+		it("falls back to clicking every beat for a meter with no usual grouping", () => {
+			// 7/4 is not listed and is not compound, so nothing is assumed about how it is grouped.
+			expect(emphasisFor("7/4")).toBe("Xxxxxxx");
+			expect(emphasisFor("11/4")).toBe("Xxxxxxxxxxx");
+		});
+	});
+
+	it("always accents the downbeat and fits the bar exactly", () => {
+		for (const beatsPerBar of [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 16]) {
+			for (const beatUnit of [2, 4, 8, 16]) {
+				const pattern = defaultEmphasis(beatsPerBar, beatUnit);
+				expect(pattern).toHaveLength(beatsPerBar);
+				expect(pattern[0]).toBe("accent");
+			}
+		}
 	});
 });

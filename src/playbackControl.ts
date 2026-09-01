@@ -432,6 +432,5 @@ function defaultSongMeta(settings: ChordSheetsSettings): SongMeta {
 	return parseSongMeta({tempo: settings.defaultTempo}, {
 		tempo: settings.defaultTempo,
 		timeSignature: settings.defaultTimeSignature,
-		emphasis: settings.defaultEmphasis
 	})!;
 }

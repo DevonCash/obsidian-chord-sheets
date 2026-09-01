@@ -428,19 +428,6 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 				})
 			);
 
-		new Setting(containerEl)
-			.setName('Default emphasis')
-			.setDesc('One character per beat: X accent, x normal, _ silent. Shorter patterns are padded with normal beats, so "X" accents the downbeat in any time signature.')
-			.addText(text => text
-				.setValue(this.plugin.settings.defaultEmphasis)
-				.onChange(async value => {
-					if (parseEmphasis(value, 4)) {
-						this.plugin.settings.defaultEmphasis = value.trim();
-						await this.plugin.saveSettings();
-					}
-				})
-			);
-
 		new Setting(containerEl).setName('Chord block syntax').setHeading();
 
 
