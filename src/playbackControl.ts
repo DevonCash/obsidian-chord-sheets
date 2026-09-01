@@ -1,0 +1,443 @@
+import {Component, Events, MarkdownView} from "obsidian";
+import {ChordSheetsSettings} from "./chordSheetsSettings";
+import {ConstantSpeedPacer, ScrollPacer, TempoScrollPacer} from "./scrollPacer";
+import {MetronomeClick} from "./metronome/click";
+import {Transport} from "./metronome/transport";
+import {Beat, beatsPerMeasure, parseSongMeta, SongMeta} from "./metronome/songMeta";
+import {
+	buildSongTimeline,
+	slotAtBeat,
+	slotAtOffset,
+	slotAtRenderedPosition,
+	SlotOccurrence,
+	SongTimeline
+} from "./metronome/songTiming";
+import {ChordHighlighter} from "./chordHighlight";
+import {TransportControl} from "./transportControl";
+
+export {AUTOSCROLL_STEPS} from "./scrollPacer";
+
+export const SPEED_CHANGED_EVENT = "speed-changed";
+export const PLAYBACK_CHANGED_EVENT = "playback-changed";
+
+/**
+ * Per-view playback: the scroll and the metronome, both driven off one shared transport so they can never
+ * drift apart. Either can run on its own.
+ *
+ * When the note carries a tempo the scroll is paced by the song's measures; otherwise it falls back to the
+ * original constant-speed slider behaviour.
+ */
+export class PlaybackControl extends Component {
+	private control: TransportControl | null = null;
+	private frameId: number | null = null;
+	private lastFrameTime = 0;
+
+	/** Whether the song is running: the scroll, the click and the chord highlight all follow this. */
+	private playing = false;
+	/** Whether the click is silenced. Independent of whether the song is running. */
+	private muted: boolean;
+	/** Whether the click is looping on its own, with the song stopped. */
+	private previewing = false;
+	/** Where the song stood when a pattern preview took the transport over. */
+	private pausedAtBeat = 0;
+	/** Whether the on-screen controls are showing. Independent of whether anything is playing. */
+	private controlsVisible = false;
+	/** Scroll offset accumulated from the user scrolling by hand, so nudging the view re-anchors it. */
+	private userScrollOffset = 0;
+	private lastAppliedScrollTop: number | null = null;
+
+	private readonly transport: Transport;
+	private readonly click: MetronomeClick;
+	private readonly highlighter: ChordHighlighter;
+	private pacer: ScrollPacer;
+	/** The song's measure timeline, or null when the note has no tempo to pace against. */
+	private timeline: SongTimeline | null = null;
+
+	readonly events = new Events();
+
+	constructor(
+		public readonly view: MarkdownView,
+		private _speed: number,
+		private _songMeta: SongMeta | null,
+		private settings: ChordSheetsSettings
+	) {
+		super();
+		this.transport = new Transport(this._songMeta ?? defaultSongMeta(settings));
+		this.muted = settings.metronomeMuted;
+		this.click = new MetronomeClick(this.transport, settings.metronomeVolume, this.muted);
+		this.highlighter = new ChordHighlighter(view);
+		this.pacer = this.createPacer();
+		view.addChild(this);
+	}
+
+	get isPlaying(): boolean {
+		return this.playing;
+	}
+
+	get isMuted(): boolean {
+		return this.muted;
+	}
+
+	get isControlVisible(): boolean {
+		return this.controlsVisible;
+	}
+
+	/** Shows the controls, or hides them and stops playback with them. */
+	toggleControls() {
+		if (this.controlsVisible) {
+			// Nothing should keep clicking once its controls are out of sight.
+			this.stop();
+		} else {
+			this.controlsVisible = true;
+			this.showControl();
+			this.events.trigger(PLAYBACK_CHANGED_EVENT);
+		}
+	}
+
+	/**
+	 * Moves playback to a slot, so a phrase can be picked up from where it starts. The bar phase is kept,
+	 * so a slot falling on beat 3 is counted as beat 3.
+	 */
+	seekToSlot(slot: SlotOccurrence) {
+		this.transport.seek(slot.startBeat);
+		this.click.resync(slot.startBeat);
+		this.highlighter.show(slot);
+	}
+
+	/** The slot covering a document offset, if the song has one there. */
+	slotAtOffset(offset: number): SlotOccurrence | null {
+		return this.timeline && slotAtOffset(this.timeline, offset);
+	}
+
+	/** The slot rendered at a given place in reading mode. */
+	slotAtRenderedPosition(blockStartLine: number, lineInBlock: number, tokenIndexInLine: number): SlotOccurrence | null {
+		return this.timeline
+			&& slotAtRenderedPosition(this.timeline, blockStartLine, lineInBlock, tokenIndexInLine);
+	}
+
+	get songMeta(): SongMeta | null {
+		return this._songMeta;
+	}
+
+	set speed(value: number) {
+		const speedValue = Math.min(Math.max(value, 1), 20);
+		if (speedValue != this._speed) {
+			this._speed = speedValue;
+
+			if (this.pacer instanceof ConstantSpeedPacer) {
+				this.pacer.setSpeed(speedValue);
+			}
+
+			this.events.trigger(SPEED_CHANGED_EVENT, speedValue);
+			this.control?.setSpeed(speedValue);
+		}
+	}
+
+	get speed(): number {
+		return this._speed;
+	}
+
+	/** Applies new metronome properties, keeping anything that is currently playing in phase. */
+	setSongMeta(songMeta: SongMeta | null) {
+		if (songMetaEquals(this._songMeta, songMeta)) {
+			return;
+		}
+		// The timeline depends on the bar's length, not the tempo, so a tempo change — a tap, a nudge —
+		// does not have to reparse the document to find the measures again.
+		const measuresChanged = !this._songMeta || !songMeta
+			|| beatsPerMeasure(this._songMeta) !== beatsPerMeasure(songMeta);
+
+		this._songMeta = songMeta;
+		this.transport.setSongMeta(songMeta ?? defaultSongMeta(this.settings));
+		if (measuresChanged) {
+			this.pacer = this.createPacer();
+		}
+		this.control?.setSongMeta(songMeta);
+	}
+
+	updateSettings(settings: ChordSheetsSettings) {
+		this.settings = settings;
+		this.click.setVolume(settings.metronomeVolume);
+		this.pacer = this.createPacer();
+		if (!settings.highlightCurrentChord) {
+			this.highlighter.clear();
+		}
+	}
+
+	/** Called when the document changed, so cached line positions (and measures) are recomputed. */
+	invalidateGeometry() {
+		if (this.isPlaying) {
+			// Editing mid-playback can change the measures themselves, not just the layout.
+			this.pacer = this.createPacer();
+		} else {
+			// Nothing is running; starting again builds a fresh pacer anyway.
+			this.pacer.invalidate();
+		}
+	}
+
+
+
+	/** Starts the song: the scroll, the click and the chord highlight all run off the one transport. */
+	async play() {
+		if (this.playing) {
+			return;
+		}
+		this.stopPatternPreview();
+
+		// Must happen in response to a user gesture, otherwise the audio context stays suspended. Done
+		// even when muted, so unmuting mid-song does not need a gesture of its own.
+		const audioContext = await this.click.prepareAudio();
+		this.transport.setAudioContext(audioContext);
+
+		this.playing = true;
+		this.controlsVisible = true;
+		this.userScrollOffset = 0;
+		this.lastAppliedScrollTop = null;
+		// Build from the current document, so edits made since the last run are accounted for.
+		this.pacer = this.createPacer();
+
+		this.transport.start();
+		// A note with no tempo has no metronome to run — play scrolls it and nothing more.
+		if (this._songMeta) {
+			this.click.start();
+		}
+		this.showControl();
+		this.startFrames();
+		this.events.trigger(PLAYBACK_CHANGED_EVENT);
+	}
+
+	/** Pauses where it stands, leaving the controls up. */
+	pause() {
+		if (!this.playing) {
+			return;
+		}
+		this.playing = false;
+		this.click.stop();
+		this.stopFrames();
+		this.transport.pause();
+		this.control?.update();
+		this.events.trigger(PLAYBACK_CHANGED_EVENT);
+	}
+
+	async togglePlay() {
+		if (this.playing) {
+			this.pause();
+		} else {
+			await this.play();
+		}
+	}
+
+	/** Silences the click, or brings it back. Never starts or stops the song. */
+	setMuted(muted: boolean) {
+		if (muted === this.muted) {
+			return;
+		}
+		this.muted = muted;
+		this.click.setMuted(muted);
+		this.control?.update();
+		this.events.trigger(PLAYBACK_CHANGED_EVENT);
+	}
+
+	toggleMute() {
+		this.setMuted(!this.muted);
+	}
+
+	/** Sounds one beat on request, for hearing what an emphasis setting does. */
+	async previewBeat(emphasis: Beat) {
+		await this.click.preview(emphasis);
+	}
+
+	get isPreviewingPattern(): boolean {
+		return this.previewing;
+	}
+
+	/** Which beat of the bar the preview is on, or null when nothing is previewing. */
+	get previewBeatInBar(): number | null {
+		if (!this.previewing) {
+			return null;
+		}
+		const {beatsPerBar} = this.transport.songMeta;
+		const beat = Math.floor(this.transport.currentBeat());
+		return ((beat % beatsPerBar) + beatsPerBar) % beatsPerBar;
+	}
+
+	/**
+	 * Loops the click alone, for hearing a pattern while setting it. No frames run, so the page behind
+	 * stays where it is — this is the metronome without the song.
+	 *
+	 * Like the single beat preview it ignores mute, being a direct request rather than the running click.
+	 */
+	async startPatternPreview() {
+		if (this.playing || this.previewing) {
+			return;
+		}
+
+		const audioContext = await this.click.prepareAudio();
+		this.transport.setAudioContext(audioContext);
+
+		// Play the bar from its first beat, and put the song back where it was afterwards.
+		this.pausedAtBeat = this.transport.currentBeat();
+		this.transport.reset();
+
+		this.previewing = true;
+		this.click.setMuted(false);
+		this.transport.start();
+		this.click.start();
+	}
+
+	stopPatternPreview() {
+		if (!this.previewing) {
+			return;
+		}
+		this.previewing = false;
+		this.click.stop();
+		this.click.setMuted(this.muted);
+		this.transport.pause();
+		this.transport.seek(this.pausedAtBeat);
+	}
+
+	/** Stops everything. Kept as `stop` because it is what the plugin calls to shut a view's playback down. */
+	stop() {
+		this.stopPatternPreview();
+		const wasShowing = this.playing || this.controlsVisible;
+		this.playing = false;
+		this.controlsVisible = false;
+		this.click.stop();
+		this.stopFrames();
+		this.transport.pause();
+		this.transport.reset();
+		this.hideControl();
+		if (wasShowing) {
+			this.events.trigger(PLAYBACK_CHANGED_EVENT);
+		}
+	}
+
+	increaseSpeed() {
+		this.speed = this.speed + 1;
+	}
+
+	decreaseSpeed() {
+		this.speed = this.speed - 1;
+	}
+
+	onunload() {
+		this.stopFrames();
+		this.click.destroy();
+		this.hideControl();
+		super.onunload();
+	}
+
+	private createPacer(): ScrollPacer {
+		// The timeline drives the chord highlight as well as the scroll, so it is built whenever the note
+		// has a tempo — even if tempo-aware scrolling itself is switched off.
+		this.timeline = this._songMeta
+			? buildSongTimeline(
+				this.view.data,
+				this.settings.blockLanguageSpecifier,
+				this.settings,
+				beatsPerMeasure(this._songMeta)
+			)
+			: null;
+
+		if (this.timeline && this.timeline.entries.length > 0 && this.settings.tempoAwareAutoscroll) {
+			return new TempoScrollPacer(
+				this.view, this.transport, this.timeline,
+				this.settings.scrollAnchorFraction, this.settings.tempoScrollMode
+			);
+		}
+		return new ConstantSpeedPacer(this._speed);
+	}
+
+	private getScrollElement(): HTMLElement | null {
+		return (this.view.getMode() === "preview"
+			? this.view.previewMode.containerEl.firstElementChild
+			: this.view.editor?.cm?.scrollDOM) as HTMLElement | null;
+	}
+
+	private startFrames() {
+		if (this.frameId !== null) {
+			return;
+		}
+		this.lastFrameTime = performance.now();
+
+		const step = () => {
+			this.frameId = window.requestAnimationFrame(step);
+
+			const now = performance.now();
+			const dtMs = now - this.lastFrameTime;
+			this.lastFrameTime = now;
+
+			this.updateChordHighlight();
+
+			const scrollElem = this.getScrollElement();
+			if (!scrollElem) {
+				return;
+			}
+
+			// A scroll position we did not set ourselves means the user scrolled by hand; carry that as an
+			// offset so the view re-anchors instead of being yanked back on the next frame.
+			if (this.lastAppliedScrollTop !== null) {
+				this.userScrollOffset += scrollElem.scrollTop - this.lastAppliedScrollTop;
+			}
+
+			const desired = this.pacer.desiredScrollTop(scrollElem, dtMs);
+			if (desired === null) {
+				this.lastAppliedScrollTop = null;
+				return;
+			}
+
+			const target = Math.max(0, desired + this.userScrollOffset);
+			scrollElem.scrollTop = target;
+			this.lastAppliedScrollTop = scrollElem.scrollTop;
+		};
+
+		this.frameId = window.requestAnimationFrame(step);
+	}
+
+	private stopFrames() {
+		if (this.frameId !== null) {
+			window.cancelAnimationFrame(this.frameId);
+			this.frameId = null;
+		}
+		this.lastAppliedScrollTop = null;
+		this.highlighter.clear();
+	}
+
+	private updateChordHighlight() {
+		if (!this.settings.highlightCurrentChord || !this.timeline) {
+			return;
+		}
+		this.highlighter.show(slotAtBeat(this.timeline, this.transport.currentBeat()));
+	}
+
+	private showControl() {
+		if (!this.control) {
+			this.control = new TransportControl(this.view, this);
+			this.control.render();
+		}
+		this.control.update();
+	}
+
+	private hideControl() {
+		this.control?.remove();
+		this.control = null;
+	}
+}
+
+function songMetaEquals(a: SongMeta | null, b: SongMeta | null): boolean {
+	if (a === null || b === null) {
+		return a === b;
+	}
+	return a.bpm === b.bpm
+		&& a.beatsPerBar === b.beatsPerBar
+		&& a.beatUnit === b.beatUnit
+		&& a.pattern.length === b.pattern.length
+		&& a.pattern.every((beat, i) => beat === b.pattern[i]);
+}
+
+function defaultSongMeta(settings: ChordSheetsSettings): SongMeta {
+	return parseSongMeta({tempo: settings.defaultTempo}, {
+		tempo: settings.defaultTempo,
+		timeSignature: settings.defaultTimeSignature,
+	})!;
+}

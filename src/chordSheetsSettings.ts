@@ -1,4 +1,5 @@
 import {Instrument} from "./instruments/types";
+import {TempoScrollMode} from "./scrollPacer";
 
 export type ShowAutoscrollButtonSetting = "never" | "chord-blocks" | "always";
 export type ShowChordOverviewSetting = "never" | "edit" | "preview" | "always";
@@ -28,6 +29,16 @@ export interface ChordSheetsSettings {
 	highlightRhythmMarkers: boolean;
 	displayInlineChordsOverLyrics: boolean;
 	showLineMarkersInReadingMode: boolean;
+
+	// Metronome and tempo-aware autoscroll
+	metronomeVolume: number;
+	metronomeMuted: boolean;
+	defaultTempo: number;
+	defaultTimeSignature: string;
+	tempoAwareAutoscroll: boolean;
+	tempoScrollMode: TempoScrollMode;
+	highlightCurrentChord: boolean;
+	scrollAnchorFraction: number;
 }
 
 export const DEFAULT_SETTINGS: ChordSheetsSettings = {
@@ -49,5 +60,14 @@ export const DEFAULT_SETTINGS: ChordSheetsSettings = {
 	highlightSectionHeaders: true,
 	highlightRhythmMarkers: true,
 	displayInlineChordsOverLyrics: false,
-	showLineMarkersInReadingMode: false
+	showLineMarkersInReadingMode: false,
+
+	metronomeVolume: 0.5,
+	metronomeMuted: false,
+	defaultTempo: 100,
+	defaultTimeSignature: "4/4",
+	tempoAwareAutoscroll: true,
+	tempoScrollMode: "chord",
+	highlightCurrentChord: true,
+	scrollAnchorFraction: 0.5
 };

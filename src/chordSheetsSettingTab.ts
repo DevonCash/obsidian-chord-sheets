@@ -1,5 +1,6 @@
 import {App, debounce, PluginSettingTab, Setting, TextComponent} from "obsidian";
-import {AUTOSCROLL_STEPS} from "./autoscrollControl";
+import {AUTOSCROLL_STEPS, TempoScrollMode} from "./scrollPacer";
+import {MAX_TEMPO, MIN_TEMPO, parseEmphasis, parseTimeSignature} from "./metronome/songMeta";
 import {
 	ChordSheetsSettings,
 	DEFAULT_BLOCK_LANGUAGE_SPECIFIER,
@@ -279,9 +280,151 @@ export class ChordSheetsSettingTab extends PluginSettingTab {
 				.addOptions(showAutoscrollButtonOptions)
 				.setValue(this.plugin.settings.showAutoscrollButton)
 				.onChange(async (value: ShowAutoscrollButtonSetting) => {
-					this.plugin.stopAllAutoscrolls();
+					this.plugin.stopAllPlayback();
 					this.plugin.settings.showAutoscrollButton = value;
 					await this.plugin.saveSettings();
+				})
+			);
+
+		const tempoAwareDescFrag = createFragment();
+		tempoAwareDescFrag.createSpan().append(`
+			When a note has a `,
+			createEl("code", {text: "tempo"}),
+			` property, pace the autoscroll from the song's tempo instead of the speed slider: each chord
+			line reaches the reading position exactly when it is played. Measures are counted from bar
+			lines (`,
+			createEl("code", {text: "| Em Am | C |"}),
+			` is two measures), or from the chord symbols on lines that have no bar lines. Notes without a
+			tempo keep using the speed slider.`
+		);
+
+		new Setting(containerEl)
+			.setName('Tempo-aware autoscroll')
+			.setDesc(tempoAwareDescFrag)
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.tempoAwareAutoscroll)
+				.onChange(async value => {
+					this.plugin.stopAllPlayback();
+					this.plugin.settings.tempoAwareAutoscroll = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Highlight the current chord')
+			.setDesc('While the metronome or the autoscroll is running, highlight the chord being played. A measure divides equally between its slots, where a slot is a chord or a % holding the previous chord, so "| Em % % Am |" gives Em three beats and Am one.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.highlightCurrentChord)
+				.onChange(async value => {
+					this.plugin.settings.highlightCurrentChord = value;
+					await this.plugin.saveSettings();
+					this.plugin.applyNewSettingsToEditors();
+				})
+			);
+
+		const scrollModeOptions: Record<TempoScrollMode, string> = {
+			chord: "Hold the current chord at the reading line",
+			continuous: "Scroll continuously at the song's pace"
+		};
+		new Setting(containerEl)
+			.setName('Tempo-aware scrolling style')
+			.setDesc("'Hold the current chord' keeps the chord being played at the reading line, so the page stays still while a chord sounds and glides on when the next one starts. 'Scroll continuously' instead moves at a steady crawl, bringing each chord line to the reading line exactly as it starts.")
+			.addDropdown(dropdown => dropdown
+				.addOptions(scrollModeOptions)
+				.setValue(this.plugin.settings.tempoScrollMode)
+				.onChange(async (value: TempoScrollMode) => {
+					this.plugin.stopAllPlayback();
+					this.plugin.settings.tempoScrollMode = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Reading position')
+			.setDesc('How far down the screen the chord being played is held, as a fraction of the window height. 0.5 is the middle.')
+			.addSlider(slider => slider
+				.setLimits(0, 0.9, 0.05)
+				.setValue(this.plugin.settings.scrollAnchorFraction)
+				.setDynamicTooltip()
+				.onChange(async value => {
+					this.plugin.stopAllPlayback();
+					this.plugin.settings.scrollAnchorFraction = value;
+					await this.plugin.saveSettings();
+				})
+			);
+
+
+		new Setting(containerEl).setName('Metronome').setHeading();
+
+		const metronomePropertiesDescFrag = createFragment();
+		metronomePropertiesDescFrag.createSpan().append(`
+			The metronome reads its settings from the note's properties: `,
+			createEl("code", {text: "tempo"}),
+			` (beats per minute), `,
+			createEl("code", {text: "beat-unit"}),
+			` (the note value a beat is, e.g. `,
+			createEl("code", {text: "1/4"}),
+			` or `,
+			createEl("code", {text: "3/8"}),
+			` for a dotted quarter; a compound meter is counted in dotted notes by default), `,
+			createEl("code", {text: "time-signature"}),
+			` (any signature, e.g. `,
+			createEl("code", {text: "4/4"}),
+			`, `,
+			createEl("code", {text: "12/8"}),
+			` or `,
+			createEl("code", {text: "8/4"}),
+			`) and `,
+			createEl("code", {text: "emphasis"}),
+			` (one character per beat: `,
+			createEl("code", {text: "X"}),
+			` accent, `,
+			createEl("code", {text: "x"}),
+			` normal, `,
+			createEl("code", {text: "_"}),
+			` silent — so `,
+			createEl("code", {text: "X__x__x__x__"}),
+			` gives four clicks per 12/8 bar). The settings below are used when a note does not specify them.`
+		);
+		new Setting(containerEl).setDesc(metronomePropertiesDescFrag);
+
+		new Setting(containerEl)
+			.setName('Metronome volume')
+			.addSlider(slider => slider
+				.setLimits(0, 1, 0.05)
+				.setValue(this.plugin.settings.metronomeVolume)
+				.setDynamicTooltip()
+				.onChange(async value => {
+					this.plugin.settings.metronomeVolume = value;
+					await this.plugin.saveSettings();
+					this.plugin.applyNewSettingsToEditors();
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Default tempo')
+			.setDesc('Used when a note has no tempo property yet.')
+			.addText(text => text
+				.setValue(String(this.plugin.settings.defaultTempo))
+				.onChange(async value => {
+					const tempo = parseInt(value, 10);
+					if (!isNaN(tempo) && tempo >= MIN_TEMPO && tempo <= MAX_TEMPO) {
+						this.plugin.settings.defaultTempo = tempo;
+						await this.plugin.saveSettings();
+					}
+				})
+			);
+
+		new Setting(containerEl)
+			.setName('Default time signature')
+			.setDesc('Any numerator and denominator, for example 4/4, 6/8, 7/8, 12/8 or 8/4.')
+			.addText(text => text
+				.setValue(this.plugin.settings.defaultTimeSignature)
+				.onChange(async value => {
+					if (parseTimeSignature(value)) {
+						this.plugin.settings.defaultTimeSignature = value.trim();
+						await this.plugin.saveSettings();
+					}
 				})
 			);
 

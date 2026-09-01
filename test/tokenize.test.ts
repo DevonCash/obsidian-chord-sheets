@@ -222,6 +222,36 @@ describe('Parsing / Tokenization', () => {
 			chord: Partial<SheetChord>
 		};
 
+		describe('bracketed text in lyrics is not a chord shape', () => {
+			// A chord shape is a note letter followed by one fret position per string. Ordinary prose
+			// followed by a bracketed number matches neither, and must not be read as a chord — a
+			// user-defined chord forces its whole line to be treated as a chord line.
+			it.each([
+				'Verse[2] of the song',
+				'Baby[1] come back',
+				'See[1] the note',
+				'Chorus[2x] again',
+			])('reads %p as a text line', (line) => {
+				const result = tokenizeLine(line, lineIndex, chordLineMarker, textLineMarker);
+				expect(result.isChordLine).toBe(false);
+				expect(result.tokens.filter(t => isChordToken(t))).toHaveLength(0);
+			});
+
+			it.each([
+				'Am[x02210]',
+				'Bbadd13[x13333]',
+				'B*[_224442_]',
+				'Dm6[4|x2x132]',
+				'Db[8 10 x 12 12 12]',
+				'C#m7(b5)[x123x]',
+				'Bb[9,8,8,8,9,8]',
+			])('still reads %p as a chord shape', (line) => {
+				const result = tokenizeLine(line, lineIndex, chordLineMarker, textLineMarker);
+				expect(result.isChordLine).toBe(true);
+				expect(result.tokens.filter(t => isChordToken(t))).toHaveLength(1);
+			});
+		});
+
 		test('should handle user-defined chords', () => {
 			const line = 'Some Am[x02210] user-defined C*4[3|x32010] chords C°[x34_24_]';
 			const { tokens } = tokenizeLine(line, lineIndex, chordLineMarker, textLineMarker);
@@ -475,6 +505,13 @@ describe('Parsing / Tokenization', () => {
 				{ value: '%', range: [12, 13] },
 				{ value: '|', range: [17, 18] }
 			]);
+		});
+
+		test('markers written without spaces are one token each', () => {
+			// Each marker renders as its own element, so a run of them stays individually addressable.
+			const { tokens } = tokenizeLine('|%|%|', lineIndex, chordLineMarker, textLineMarker);
+			expect(tokens.map(t => t.value)).toEqual(['|', '%', '|', '%', '|']);
+			expect(tokens.every(t => t.type === 'rhythm')).toBe(true);
 		});
 
 		test('rhythm patterns with chords', () => {

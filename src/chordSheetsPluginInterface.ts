@@ -6,5 +6,5 @@ export interface IChordSheetsPlugin extends Plugin {
 	settings: ChordSheetsSettings
 	saveSettings: () => Promise<void>
 	applyNewSettingsToEditors: () => void
-	stopAllAutoscrolls: () => void
+	stopAllPlayback: () => void
 }

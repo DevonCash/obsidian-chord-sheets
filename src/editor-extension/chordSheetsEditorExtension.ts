@@ -7,10 +7,12 @@ import {
 	chordSheetsConfigFacet
 } from "./chordBlocksStateField";
 import {debugExtensions} from "./debugUtils";
+import {currentChordField} from "./currentChordField";
 
 export const chordSheetsEditorExtension = (settings: ChordSheetsSettings, viewPlugin?: ViewPlugin<ChordSheetsViewPlugin>) => [
 	chordSheetsConfig.of(chordSheetsConfigFacet.of({...settings})),
 	chordBlocksStateField,
+	currentChordField,
 	viewPlugin ?? chordSheetEditorPlugin(),
 	settings.debug ? debugExtensions : []
 ];
