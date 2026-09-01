@@ -254,6 +254,36 @@ export function parseSongMeta(
 	};
 }
 
+/** How many tempo beats a bar holds — four, for a 12/8 bar counted in dotted quarters. */
+export function tempoBeatsPerBar(meta: Pick<SongMeta, "beatsPerBar" | "tempoUnit" | "beatUnit">): number {
+	return meta.beatsPerBar / (meta.tempoUnit * meta.beatUnit);
+}
+
+/** How many times the emphasis pattern sounds in a bar. */
+export function audibleBeatsPerBar(meta: Pick<SongMeta, "pattern">): number {
+	return meta.pattern.filter(beat => beat !== "silent").length;
+}
+
+/**
+ * The tempo implied by tapping along with the metronome, given how fast the taps came.
+ *
+ * You tap what you hear, which is the emphasis pattern, and that need not sound once per tempo beat: a
+ * 12/8 bar counted in eighths holds twelve beats but usually sounds four times, so tapping along with it
+ * reads a third of the tempo. Converting by that ratio makes tapping mean the same thing however the
+ * meter is counted and whatever the pattern sounds.
+ */
+export function tempoFromTappedClicks(
+	meta: Pick<SongMeta, "beatsPerBar" | "tempoUnit" | "beatUnit" | "pattern">,
+	tappedPerMinute: number
+): number {
+	const audible = audibleBeatsPerBar(meta);
+	// A silent pattern gives nothing to have tapped along with, so take the taps at face value.
+	const tempo = audible > 0
+		? tappedPerMinute * (tempoBeatsPerBar(meta) / audible)
+		: tappedPerMinute;
+	return clamp(Math.round(tempo), MIN_TEMPO, MAX_TEMPO);
+}
+
 /** Beats a single notated measure lasts, which is a whole bar per measure it stands for. */
 export function beatsPerMeasure(meta: Pick<SongMeta, "beatsPerBar" | "measuresPerSymbol">): number {
 	return meta.beatsPerBar * meta.measuresPerSymbol;

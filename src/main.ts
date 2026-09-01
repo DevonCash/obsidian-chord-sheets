@@ -22,6 +22,7 @@ import {
 	MIN_TEMPO,
 	parseSongMeta,
 	SongMeta,
+	tempoFromTappedClicks,
 	TEMPO_PROPERTY,
 	TIME_SIGNATURE_PROPERTY
 } from "./metronome/songMeta";
@@ -649,11 +650,15 @@ export default class ChordSheetsPlugin extends Plugin implements IChordSheetsPlu
 
 	/** Sets the note's tempo from the interval between successive invocations of the command. */
 	private tapTempoCommand(file: TFile) {
-		const bpm = this.tapTempo.tap(performance.now());
-		if (bpm === null) {
+		const tapped = this.tapTempo.tap(performance.now());
+		if (tapped === null) {
 			new Notice("Tap tempo: keep tapping…");
 			return;
 		}
+
+		// You tap along with the clicks, which need not sound once per tempo beat.
+		const songMeta = this.getSongMetaFromFrontmatter(file);
+		const bpm = songMeta ? tempoFromTappedClicks(songMeta, tapped) : tapped;
 		this.saveTempo(file, bpm);
 		new Notice(`Tempo: ${bpm} BPM`);
 	}

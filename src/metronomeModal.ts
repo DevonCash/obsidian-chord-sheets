@@ -13,6 +13,7 @@ import {
 	SongMeta,
 	TEMPO_UNITS,
 	parseTempoUnit,
+	tempoFromTappedClicks,
 	tempoUnitLabel,
 	tempoUnitNotation,
 	timeSignatureToString
@@ -215,7 +216,9 @@ export class MetronomeModal extends Modal {
 
 	/** One tap of the tempo: the first has no interval to measure, so it only invites another. */
 	private tap(buttonEl: HTMLElement) {
-		const bpm = this.tapTempo.tap(performance.now());
+		const tapped = this.tapTempo.tap(performance.now());
+		// You tap along with the clicks, which need not sound once per tempo beat.
+		const bpm = tapped === null ? null : tempoFromTappedClicks(this.meta, tapped);
 		// The count is shown because it is the one thing a wrong reading cannot tell you: a tempo that
 		// comes out a clean fraction of what was tapped means taps went missing, not that the average
 		// was off.

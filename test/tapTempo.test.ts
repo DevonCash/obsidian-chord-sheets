@@ -1,5 +1,11 @@
 import {TapTempo} from "../src/metronome/tapTempo";
-import {barDurationMs, MAX_TEMPO, MIN_TEMPO, parseSongMeta} from "../src/metronome/songMeta";
+import {
+	barDurationMs,
+	MAX_TEMPO,
+	MIN_TEMPO,
+	parseSongMeta,
+	tempoFromTappedClicks
+} from "../src/metronome/songMeta";
 
 /** Taps at a steady interval, returning the tempo after the last one. */
 function tapAt(tapTempo: TapTempo, intervalMs: number, times: number, from = 1000) {
@@ -106,3 +112,56 @@ describe("TapTempo", () => {
 function docsInterval(bpm: number): number {
 	return 60000 / bpm;
 }
+
+describe("tapping along with the clicks", () => {
+	const defaults = {tempo: 100, timeSignature: "4/4"};
+	const meta = (frontmatter: Record<string, unknown>) =>
+		parseSongMeta({tempo: 100, ...frontmatter}, defaults)!;
+
+	/** What the clicks sound like per minute, for a song at a given tempo. */
+	const clicksPerMinute = (m: ReturnType<typeof meta>) =>
+		60000 / (barDurationMs(m) / m.pattern.filter(b => b !== "silent").length);
+
+	it("reads back the tempo you tapped along with, whatever the meter is counted in", () => {
+		// The reported case: 12/8 counted in eighths, sounding its four pulses. The clicks come at a
+		// third of the tempo, so tapping them used to read a third of it back.
+		const cases = [
+			{tempo: 124, "time-signature": "12/8", "beat-unit": "1/8", emphasis: "X__X__X__X__"},
+			{tempo: 124, "time-signature": "12/8", emphasis: "X__x__x__x__"},
+			{tempo: 120, "time-signature": "4/4"},
+			{tempo: 120, "time-signature": "4/4", "beat-unit": "1/2"},
+			{tempo: 90, "time-signature": "6/8"},
+			{tempo: 90, "time-signature": "7/8", emphasis: "X_x_x__"}
+		];
+
+		for (const frontmatter of cases) {
+			const m = meta(frontmatter);
+			expect(tempoFromTappedClicks(m, clicksPerMinute(m))).toBe(frontmatter.tempo);
+		}
+	});
+
+	it("turns the reported case back into the tempo that was tapped", () => {
+		// Tapping along at 124 read 42 before; the clicks really do come at 41.3 a minute.
+		const m = meta({"time-signature": "12/8", "beat-unit": "1/8", emphasis: "X__X__X__X__"});
+		expect(tempoFromTappedClicks(m, 41.3)).toBe(124);
+	});
+
+	it("changes nothing when the pattern already sounds once per beat", () => {
+		// The common case: every tempo beat is clicked, so the taps are the tempo.
+		for (const frontmatter of [{}, {"time-signature": "3/4"}, {"time-signature": "12/8"}]) {
+			const m = meta(frontmatter);
+			expect(tempoFromTappedClicks(m, 96)).toBe(96);
+		}
+	});
+
+	it("takes the taps at face value when the pattern sounds nothing", () => {
+		const m = meta({"time-signature": "4/4", emphasis: "____"});
+		expect(tempoFromTappedClicks(m, 96)).toBe(96);
+	});
+
+	it("keeps the result inside the usable tempo range", () => {
+		const m = meta({"time-signature": "12/8", "beat-unit": "1/8", emphasis: "X__X__X__X__"});
+		expect(tempoFromTappedClicks(m, 400)).toBe(MAX_TEMPO);
+		expect(tempoFromTappedClicks(m, 1)).toBe(MIN_TEMPO);
+	});
+});
