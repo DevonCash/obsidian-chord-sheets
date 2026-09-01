@@ -6,7 +6,7 @@
  * performance.now()) and falls back to performance.now() when audio could not be started.
  */
 
-import {SongMeta} from "./songMeta";
+import {beatDurationMs, SongMeta} from "./songMeta";
 
 export class Transport {
 	private running = false;
@@ -42,17 +42,26 @@ export class Transport {
 		return this.audioContext ? this.audioContext.currentTime : performance.now() / 1000;
 	}
 
+	/**
+	 * Seconds one beat lasts. A beat here is the time signature's own note value, which is what the
+	 * emphasis pattern and the measure timeline both count in — while the tempo may be given in another
+	 * note value entirely, so it cannot be used as a rate directly.
+	 */
+	private get secondsPerBeat(): number {
+		return beatDurationMs(this.meta) / 1000;
+	}
+
 	/** Fractional beats elapsed since the song started. */
 	currentBeat(): number {
 		if (!this.running) {
 			return this.beatOffset;
 		}
-		return this.beatOffset + (this.now() - this.startedAt) * (this.meta.bpm / 60);
+		return this.beatOffset + (this.now() - this.startedAt) / this.secondsPerBeat;
 	}
 
 	/** Clock time in seconds at which the given beat falls due. */
 	timeOfBeat(beat: number): number {
-		return this.startedAt + (beat - this.beatOffset) * (60 / this.meta.bpm);
+		return this.startedAt + (beat - this.beatOffset) * this.secondsPerBeat;
 	}
 
 	start() {
